@@ -69,7 +69,8 @@ export default function EstoquePage() {
   function limparFiltros() {
     setBusca(''); setFiltroCor(''); setFiltroTipo(''); setFiltroSit('');
   }
-  const nColunas = 11 + (ehDono ? 1 : 0) + (mode === 'venda' ? 2 : 0);
+  // 10 colunas base (até Venda) + 3 só do dono (Compra, Mínimo, Lucro) + 2 no modo à venda (Marcador, Ações)
+  const nColunas = 10 + (ehDono ? 3 : 0) + (mode === 'venda' ? 2 : 0);
 
   async function onAddSave(dados) {
     const { error } = await addVeiculo(dados);
@@ -178,6 +179,8 @@ export default function EstoquePage() {
                   {['Cód', 'Modelo', 'Fab/Mod', 'Cor', 'Placa', 'Tipo', 'Entrada', 'Saída', 'Situação'].map((h) => (
                     <Th key={h}>{h}</Th>
                   ))}
+                  {ehDono && <Th r>Compra</Th>}
+                  {ehDono && <Th r>Mínimo</Th>}
                   <Th r>Venda</Th>
                   {ehDono && <Th r>Lucro</Th>}
                   {mode === 'venda' && <Th>Marcador</Th>}
@@ -221,6 +224,8 @@ export default function EstoquePage() {
                             {sit.label}
                           </span>
                         </Td>
+                        {ehDono && <Td r className="num text-muted">{fmt(v.compra)}</Td>}
+                        {ehDono && <Td r className="num text-muted">{fmt(v.minimo)}</Td>}
                         <Td r className="num font-medium">{fmt(valorVenda)}</Td>
                         {ehDono && <Td r className="num font-bold" style={{ color: lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmt(lucro)}</Td>}
                         {mode === 'venda' && (
