@@ -18,6 +18,7 @@ export function useContratos() {
   const [config, setConfig] = useState({ assinatura_nome: '', assinatura_cnpj: '' });
   const [veiculos, setVeiculos] = useState([]);
   const [documentos, setDocumentos] = useState([]);
+  const [modelosLoja, setModelosLoja] = useState({}); // tipo -> { arquivo_nome }
   const [loading, setLoading] = useState(true);
 
   const carregar = useCallback(async () => {
@@ -25,18 +26,23 @@ export function useContratos() {
       setConfig({ assinatura_nome: 'Auto Mendes Veículos', assinatura_cnpj: '00.000.000/0001-00' });
       setVeiculos(demoVeiculos());
       setDocumentos(docsDemoSeed.map((d) => ({ ...d })));
+      setModelosLoja({});
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ data: cfg }, { data: vs }, { data: ds }] = await Promise.all([
+    const [{ data: cfg }, { data: vs }, { data: ds }, { data: ms }] = await Promise.all([
       supabase.from('loja_config').select('*').eq('loja_id', lojaId).maybeSingle(),
       supabase.from('veiculos').select('*'),
       supabase.from('documentos').select('*').order('criado_em', { ascending: false }),
+      supabase.from('modelos_documento').select('*'),
     ]);
     setConfig(cfg || { assinatura_nome: loja?.nome || '', assinatura_cnpj: '' });
     setVeiculos(vs || []);
     setDocumentos(ds || []);
+    const mp = {};
+    for (const m of ms || []) mp[m.tipo] = m;
+    setModelosLoja(mp);
     setLoading(false);
   }, [demo, lojaId, loja]);
 
@@ -75,5 +81,34 @@ export function useContratos() {
     return { error };
   }
 
-  return { demo, loading, config, veiculos, documentos, salvarConfig, registrarDocumento };
+  function modeloDe(tipo) {
+    return modelosLoja[tipo] || null;
+  }
+
+  // Sobe o modelo do lojista para um tipo. (Upload real ao Storage fica para
+  // a fase pós-MVP; aqui registramos o nome do arquivo + mapeamento por placeholders.)
+  async function uploadModelo(tipo, file) {
+    const arquivo_nome = file?.name || 'modelo';
+    if (demo) {
+      setModelosLoja((m) => ({ ...m, [tipo]: { tipo, arquivo_nome } }));
+      return { error: null };
+    }
+    const { error } = await supabase
+      .from('modelos_documento')
+      .upsert({ loja_id: lojaId, tipo, arquivo_url: arquivo_nome, mapeamento_campos: { modo: 'placeholders' } }, { onConflict: 'loja_id,tipo' });
+    if (!error) await carregar();
+    return { error };
+  }
+
+  async function removerModelo(tipo) {
+    if (demo) {
+      setModelosLoja((m) => { const n = { ...m }; delete n[tipo]; return n; });
+      return { error: null };
+    }
+    const { error } = await supabase.from('modelos_documento').delete().eq('loja_id', lojaId).eq('tipo', tipo);
+    if (!error) await carregar();
+    return { error };
+  }
+
+  return { demo, loading, config, veiculos, documentos, salvarConfig, registrarDocumento, modeloDe, uploadModelo, removerModelo };
 }

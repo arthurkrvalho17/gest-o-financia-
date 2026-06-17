@@ -17,8 +17,9 @@ const itensOperacao = [
   { to: '/crm', label: 'CRM', Icon: IconCrm },
 ];
 
+// Financeiro é só do dono (soDono: true).
 const itensGestao = [
-  { to: '/financeiro', label: 'Financeiro', Icon: IconFinanceiro },
+  { to: '/financeiro', label: 'Financeiro', Icon: IconFinanceiro, soDono: true },
   { to: '/contratos', label: 'Contratos', Icon: IconContratos },
 ];
 
@@ -34,7 +35,8 @@ function iniciais(nome) {
 }
 
 export default function Sidebar() {
-  const { loja, sair } = useAuth();
+  const { loja, sair, ehDono, demo, usuario, definirPapelDemo } = useAuth();
+  const gestaoVisivel = itensGestao.filter((i) => !i.soDono || ehDono);
 
   const linkClass = ({ isActive }) =>
     [
@@ -70,7 +72,7 @@ export default function Sidebar() {
         <div className="text-[11px] font-semibold text-white/[0.42] uppercase tracking-wider px-3 pt-2.5 pb-1.5">
           Gestão
         </div>
-        {itensGestao.map(({ to, label, Icon }) => (
+        {gestaoVisivel.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to} className={linkClass}>
             <Icon className="w-[18px] h-[18px] flex-shrink-0" /> {label}
           </NavLink>
@@ -83,6 +85,22 @@ export default function Sidebar() {
         </div>
         <SidebarSoon Icon={IconFinanciamento} label="Financiamento" tag="em breve" />
       </nav>
+
+      {/* Seletor de papel (só no modo demonstração) */}
+      {demo && (
+        <div className="px-3.5 pt-3 border-t border-white/[0.08]">
+          <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">Ver como (demo)</div>
+          <div className="flex bg-white/[0.06] rounded-lg p-0.5 gap-0.5">
+            {[['dono', 'Dono'], ['funcionario', 'Funcionário']].map(([p, lbl]) => (
+              <button key={p} onClick={() => definirPapelDemo(p)}
+                className={['flex-1 text-[11.5px] font-semibold py-1.5 rounded-md transition',
+                  (usuario?.papel || 'dono') === p ? 'bg-blue text-white' : 'text-white/60 hover:text-white'].join(' ')}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Rodapé: loja + sair */}
       <div className="p-3.5 border-t border-white/[0.08] flex items-center gap-2.5">

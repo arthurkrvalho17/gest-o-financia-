@@ -60,6 +60,13 @@ export const demoCustos = {
   8150220: 2800, 8148990: 2800, 8147112: 1100,
 };
 
+// Equipe da loja (vira a lista de vendedores no Registrar venda).
+export const demoEquipe = [
+  { id: 'u-dono', nome: 'Rogério (dono)', papel: 'dono' },
+  { id: 'u-lucas', nome: 'Lucas', papel: 'funcionario' },
+  { id: 'u-pereira', nome: 'Pereira', papel: 'funcionario' },
+];
+
 export function demoVeiculos() {
   // cópia profunda para o estado poder mutar sem afetar o módulo
   return [...aVenda, ...vendidos].map((x) => ({ ...x }));

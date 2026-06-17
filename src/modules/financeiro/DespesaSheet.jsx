@@ -51,7 +51,7 @@ export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar })
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
               <thead>
-                <tr>
+                <tr className="bg-[#F4F7FB]">
                   <Th>#</Th><Th>Descrição</Th><Th>Vencimento</Th><Th center>Lembrete</Th>
                   <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Data pgto.</Th><Th>Observações</Th><Th>{''}</Th>
                 </tr>
@@ -61,7 +61,7 @@ export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar })
                   <tr><td colSpan={9} className="px-[14px] py-8 text-center text-muted">Sem lançamentos. Use "Adicionar despesa".</td></tr>
                 )}
                 {itens.map((x, i) => (
-                  <tr key={x.id}>
+                  <tr key={x.id} className="odd:bg-[#FAFBFD] hover:bg-blue-soft/50">
                     <SheetTd className="num text-muted-2">{i + 1}</SheetTd>
                     <SheetTd><Cell value={x.descricao} onChange={(v) => up(x, { descricao: v })} placeholder="Descrição" /></SheetTd>
                     <SheetTd><Cell value={x.vencimento} onChange={(v) => up(x, { vencimento: v })} placeholder="—" w="120px" /></SheetTd>
@@ -92,7 +92,7 @@ export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar })
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between px-[18px] py-3.5 bg-bg flex-wrap gap-3">
+          <div className="flex items-center justify-between px-[18px] py-3.5 bg-[#F4F7FB] flex-wrap gap-3">
             <button onClick={() => fin.addDespesa(mes, categoria)} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
               Adicionar despesa

@@ -85,7 +85,18 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }
 
-  const valor = { session, usuario, loja, carregando, entrar, cadastrar, sair };
+  // Troca o papel no modo demonstração, para visualizar as duas visões.
+  function definirPapelDemo(papel) {
+    setUsuario((u) => (u ? { ...u, papel } : u));
+  }
+
+  const ehDono = (usuario?.papel || 'dono') !== 'funcionario';
+
+  const valor = {
+    session, usuario, loja, carregando, ehDono,
+    entrar, cadastrar, sair, definirPapelDemo,
+    demo: !supabaseConfigurado,
+  };
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;
 }
 

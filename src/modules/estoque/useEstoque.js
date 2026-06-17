@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { hojeISO } from '../../lib/format';
-import { demoVeiculos, demoVendas } from './demoData';
+import { demoVeiculos, demoVendas, demoEquipe } from './demoData';
 import { totalPrepDemo } from '../preparacao/demoPrep';
 
 // Camada de dados do Estoque.
@@ -15,6 +15,7 @@ export function useEstoque() {
 
   const [veiculos, setVeiculos] = useState([]);
   const [vendas, setVendas] = useState([]);
+  const [equipe, setEquipe] = useState([]); // vendedores da loja
   const [custosMap, setCustosMap] = useState({}); // veiculo_id -> soma da preparação (modo real)
   const [loading, setLoading] = useState(true);
 
@@ -22,17 +23,20 @@ export function useEstoque() {
     if (demo) {
       setVeiculos(demoVeiculos());
       setVendas(demoVendas());
+      setEquipe(demoEquipe);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ data: vs }, { data: vd }, { data: gs }] = await Promise.all([
+    const [{ data: vs }, { data: vd }, { data: gs }, { data: us }] = await Promise.all([
       supabase.from('veiculos').select('*').order('entrada', { ascending: false }),
       supabase.from('vendas').select('*'),
       supabase.from('preparacao_gastos').select('veiculo_id, valor'),
+      supabase.from('usuarios').select('id, nome, papel'),
     ]);
     setVeiculos(vs || []);
     setVendas(vd || []);
+    setEquipe(us || []);
     // Custo de cada carro = soma dos gastos de preparação (fonte única).
     const m = {};
     for (const g of gs || []) m[g.veiculo_id] = (m[g.veiculo_id] || 0) + (Number(g.valor) || 0);
@@ -52,6 +56,7 @@ export function useEstoque() {
   );
 
   async function addVeiculo(dados) {
+    const { fotos, ...campos } = dados; // fotos vão para tabela/Storage à parte
     if (demo) {
       const novo = {
         id: globalThis.crypto?.randomUUID?.() || 'demo-' + Date.now(),
@@ -61,14 +66,26 @@ export function useEstoque() {
         saida: null,
         marcador_texto: null,
         marcador_cor: null,
-        ...dados,
+        fotos: fotos || [],
+        ...campos,
       };
       setVeiculos((arr) => [novo, ...arr]);
       return { error: null };
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('veiculos')
-      .insert({ ...dados, loja_id: lojaId, situacao: 'estoque' });
+      .insert({ ...campos, loja_id: lojaId, situacao: 'estoque' })
+      .select('id')
+      .single();
+    // Upload das fotos para o Supabase Storage fica para a fase pós-MVP;
+    // aqui só registramos os metadados se já houver URLs.
+    if (!error && data?.id && fotos?.length) {
+      await supabase.from('veiculo_fotos').insert(
+        fotos.filter((f) => f.url && !f.url.startsWith('blob:')).map((f) => ({
+          loja_id: lojaId, veiculo_id: data.id, url: f.url, ordem: f.ordem,
+        }))
+      );
+    }
     if (!error) await carregar();
     return { error };
   }
@@ -84,7 +101,7 @@ export function useEstoque() {
     return { error };
   }
 
-  async function registrarVenda(veic, { valor_venda, data_venda, comprador_nome, forma_pagamento }) {
+  async function registrarVenda(veic, { valor_venda, data_venda, comprador_nome, forma_pagamento, vendedor_id, observacao }) {
     const novaSituacao = veic.tipo === 'consignado' ? 'repasse' : 'vendido';
     if (demo) {
       const venda = {
@@ -95,6 +112,8 @@ export function useEstoque() {
         data_venda,
         comprador_nome,
         forma_pagamento,
+        vendedor_id,
+        observacao,
       };
       setVendas((arr) => [venda, ...arr]);
       setVeiculos((arr) =>
@@ -111,7 +130,8 @@ export function useEstoque() {
       data_venda,
       comprador_nome: comprador_nome || null,
       forma_pagamento,
-      vendedor_id: usuario?.id || null,
+      vendedor_id: vendedor_id || usuario?.id || null,
+      observacao: observacao || null,
     });
     if (e1) return { error: e1 };
     const { error: e2 } = await supabase
@@ -122,7 +142,7 @@ export function useEstoque() {
     return { error: e2 };
   }
 
-  return { veiculos, vendas, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda };
+  return { veiculos, vendas, equipe, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda };
 }
 
 // Helpers de cálculo (lucro nunca é guardado fixo — sempre calculado).

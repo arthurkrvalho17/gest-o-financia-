@@ -1,13 +1,115 @@
-// Modelos de documento e seus campos específicos.
+// Modelos de documento e seus campos específicos (pesquisados conforme as
+// exigências usuais no Brasil). Cada campo: { key, label, dinheiro?, textarea?, full?, valorPadrao? }.
+
+const T = (key, label, opts = {}) => ({ key, label, ...opts });
+
 export const MODELOS = {
-  compra_venda: { nome: 'Contrato de compra e venda', desc: 'Venda do veículo ao cliente', extra: [] },
-  recibo_sinal: { nome: 'Recibo de sinal', desc: 'Entrada / reserva do veículo', extra: [{ key: 'valor_sinal', label: 'Valor do sinal', dinheiro: true }] },
-  consignacao: { nome: 'Contrato de consignação', desc: 'Carro de terceiro à venda na loja', extra: [{ key: 'consignante_nome', label: 'Nome do consignante' }, { key: 'consignante_cpf', label: 'CPF do consignante' }] },
-  test_drive: { nome: 'Termo de test drive', desc: 'Responsabilidade durante o test drive', extra: [{ key: 'cnh', label: 'CNH do condutor' }] },
-  procuracao: { nome: 'Procuração', desc: 'Transferência junto ao Detran', extra: [{ key: 'finalidade', label: 'Finalidade' }] },
-  nota_entrada: { nome: 'Nota de entrada', desc: 'Compra de carro de particular', extra: [{ key: 'vendedor_nome', label: 'Vendedor (particular)' }, { key: 'vendedor_cpf', label: 'CPF do vendedor' }] },
+  compra_venda: {
+    nome: 'Contrato de compra e venda',
+    desc: 'Venda do veículo ao cliente',
+    grupos: [
+      { titulo: 'Qualificação do comprador', campos: [
+        T('nacionalidade', 'Nacionalidade'), T('estado_civil', 'Estado civil'),
+        T('profissao', 'Profissão'), T('rg', 'RG / órgão emissor'),
+        T('endereco', 'Endereço completo', { full: true }),
+      ] },
+      { titulo: 'Dados complementares do veículo', campos: [
+        T('renavam', 'RENAVAM'), T('chassi', 'Chassi'),
+        T('km', 'Quilometragem'), T('combustivel', 'Combustível'),
+      ] },
+      { titulo: 'Negociação', campos: [
+        T('valor_venda', 'Valor da venda', { dinheiro: true }),
+        T('forma_pagamento', 'Forma de pagamento'),
+        T('prazo_entrega', 'Prazo de entrega'), T('garantia', 'Garantia'),
+        T('observacoes', 'Observações / estado do veículo', { textarea: true, full: true }),
+      ] },
+    ],
+  },
+  recibo_sinal: {
+    nome: 'Recibo de sinal',
+    desc: 'Entrada / reserva do veículo',
+    notaLegal: 'Sinal = arras (arts. 417–420 do Código Civil): se o cliente desiste, perde o sinal; se a loja desiste, devolve em dobro.',
+    grupos: [
+      { titulo: 'Valores', campos: [
+        T('valor_total', 'Valor total', { dinheiro: true }),
+        T('sinal_recebido', 'Sinal recebido', { dinheiro: true }),
+        T('saldo_restante', 'Saldo restante', { dinheiro: true }),
+        T('condicao_saldo', 'Condição de pagamento do saldo', { full: true }),
+      ] },
+    ],
+  },
+  consignacao: {
+    nome: 'Contrato de consignação',
+    desc: 'Carro de terceiro à venda na loja',
+    grupos: [
+      { titulo: 'Consignante (dono)', campos: [
+        T('consignante_nome', 'Nome / razão social', { full: true }),
+        T('consignante_doc', 'CPF / CNPJ'), T('consignante_rg', 'RG / inscrição'),
+        T('consignante_tel', 'Telefone'),
+        T('consignante_endereco', 'Endereço', { full: true }),
+      ] },
+      { titulo: 'Termos', campos: [
+        T('valor_pretendido', 'Valor de venda pretendido', { dinheiro: true }),
+        T('valor_repasse', 'Valor de repasse ao dono', { dinheiro: true }),
+        T('comissao', 'Comissão da loja', { dinheiro: true }),
+        T('prazo', 'Prazo da consignação'),
+        T('responsabilidades', 'Responsabilidades (IPVA, multas, manutenção)', { textarea: true, full: true }),
+      ] },
+    ],
+  },
+  procuracao: {
+    nome: 'Procuração',
+    desc: 'Transferência junto ao Detran',
+    grupos: [
+      { titulo: 'Outorgado', campos: [
+        T('outorgado_nome', 'Nome do outorgado', { full: true }),
+        T('outorgado_cpf', 'CPF'), T('outorgado_rg', 'RG'),
+      ] },
+      { titulo: 'Veículo e mandato', campos: [
+        T('renavam', 'RENAVAM'), T('chassi', 'Chassi'),
+        T('poderes', 'Poderes', { textarea: true, full: true, valorPadrao: 'Poderes para representar o outorgante junto ao Detran, assinar ATPV-e/CRV e praticar atos para a transferência do veículo.' }),
+        T('validade', 'Validade / prazo'), T('cidade', 'Cidade'),
+      ] },
+    ],
+  },
+  test_drive: {
+    nome: 'Termo de test drive',
+    desc: 'Responsabilidade durante o test drive',
+    grupos: [
+      { titulo: 'Condutor', campos: [
+        T('cnh_numero', 'CNH (número)'), T('cnh_categoria', 'Categoria'),
+        T('cnh_validade', 'Validade da CNH'), T('telefone', 'Telefone'),
+      ] },
+      { titulo: 'Test drive', campos: [
+        T('data_hora', 'Data e hora'), T('trajeto', 'Trajeto previsto', { full: true }),
+        T('declaracao', 'Declaração de responsabilidade', { textarea: true, full: true, valorPadrao: 'O condutor assume total responsabilidade por danos, multas e ocorrências durante o test drive.' }),
+      ] },
+    ],
+  },
+  nota_entrada: {
+    nome: 'Nota de entrada',
+    desc: 'Compra de carro de particular',
+    grupos: [
+      { titulo: 'Vendedor (particular)', campos: [
+        T('vendedor_nome', 'Nome', { full: true }),
+        T('vendedor_cpf', 'CPF'), T('vendedor_rg', 'RG'),
+        T('vendedor_tel', 'Telefone'),
+        T('vendedor_endereco', 'Endereço', { full: true }),
+      ] },
+      { titulo: 'Compra', campos: [
+        T('valor_compra', 'Valor de compra', { dinheiro: true }),
+        T('forma_pagamento', 'Forma de pagamento'),
+        T('data_entrada', 'Data de entrada'),
+      ] },
+    ],
+  },
 };
 
 export const ORDEM_MODELOS = [
-  'compra_venda', 'recibo_sinal', 'consignacao', 'test_drive', 'procuracao', 'nota_entrada',
+  'compra_venda', 'recibo_sinal', 'consignacao', 'procuracao', 'test_drive', 'nota_entrada',
 ];
+
+// Todos os campos extras achatados (para o formulário e valores padrão).
+export function camposExtra(tipo) {
+  return (MODELOS[tipo]?.grupos || []).flatMap((g) => g.campos);
+}

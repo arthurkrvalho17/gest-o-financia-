@@ -4,6 +4,7 @@ import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { fmt, ddmm, diasDesde } from '../../lib/format';
 import { useEstoque, lucroEstimado, lucroRealizado } from './useEstoque';
+import { useAuth } from '../../auth/AuthContext';
 import AddVeiculoModal from './AddVeiculoModal';
 import RegistrarVendaModal from './RegistrarVendaModal';
 import MarcadorModal from './MarcadorModal';
@@ -20,11 +21,15 @@ const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
 
 export default function EstoquePage() {
   const toast = useToast();
-  const { veiculos, vendas, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda } =
+  const { ehDono } = useAuth();
+  const { veiculos, vendas, equipe, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda } =
     useEstoque();
 
   const [mode, setMode] = useState('venda');
   const [busca, setBusca] = useState('');
+  const [filtroCor, setFiltroCor] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
+  const [filtroSit, setFiltroSit] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [marcAlvo, setMarcAlvo] = useState(null);
   const [vendaAlvo, setVendaAlvo] = useState(null);
@@ -48,15 +53,23 @@ export default function EstoquePage() {
   const vendasMes = vendas.filter((v) => (v.data_venda || '').slice(0, 7) === mesAtual);
   const faturamentoMes = vendasMes.reduce((s, v) => s + (v.valor_venda || 0), 0);
 
-  // Lista filtrada
+  // Lista filtrada (filtros combinam; mantém referência ao registro original)
   const fonte = mode === 'venda' ? aVenda : vendidos;
+  const cores = [...new Set(fonte.map((v) => v.cor).filter(Boolean))].sort();
+  const situacoesDoModo = mode === 'venda' ? ahVendaSit : vendidoSit;
+  const q = busca.trim().toLowerCase();
   const lista = fonte.filter((v) => {
-    if (!busca.trim()) return true;
-    const q = busca.toLowerCase();
-    return (
-      (v.modelo || '').toLowerCase().includes(q) || (v.placa || '').toLowerCase().includes(q)
-    );
+    if (q && !(`${v.modelo} ${v.placa} ${v.codigo}`.toLowerCase().includes(q))) return false;
+    if (filtroCor && v.cor !== filtroCor) return false;
+    if (filtroTipo && v.tipo !== filtroTipo) return false;
+    if (filtroSit && v.situacao !== filtroSit) return false;
+    return true;
   });
+  const temFiltro = busca || filtroCor || filtroTipo || filtroSit;
+  function limparFiltros() {
+    setBusca(''); setFiltroCor(''); setFiltroTipo(''); setFiltroSit('');
+  }
+  const nColunas = 11 + (ehDono ? 1 : 0) + (mode === 'venda' ? 2 : 0);
 
   async function onAddSave(dados) {
     const { error } = await addVeiculo(dados);
@@ -74,10 +87,12 @@ export default function EstoquePage() {
     if (error) toast('Erro: ' + error.message);
   }
   async function onVendaConfirm(dados) {
-    const { error } = await registrarVenda(vendaAlvo, dados);
-    const luc = lucroRealizado(dados.valor_venda, vendaAlvo, custosDe(vendaAlvo));
+    const alvo = vendaAlvo;
+    const { error } = await registrarVenda(alvo, dados);
+    const luc = lucroRealizado(dados.valor_venda, alvo, custosDe(alvo));
     setVendaAlvo(null);
-    toast(error ? 'Erro: ' + error.message : 'Venda registrada · lucro ' + fmt(luc));
+    if (error) toast('Erro: ' + error.message);
+    else toast(ehDono ? 'Venda registrada · lucro ' + fmt(luc) : 'Venda registrada');
   }
 
   return (
@@ -121,7 +136,7 @@ export default function EstoquePage() {
               <Seg on={mode === 'vendidos'} onClick={() => setMode('vendidos')}>Carros já vendidos</Seg>
             </div>
             <div className="flex items-center gap-3.5">
-              <span className="text-[12px] text-muted-2 num">{lista.length} resultados</span>
+              <span className="text-[12px] text-muted-2 num">Exibindo {lista.length} de {fonte.length}</span>
               <div className="flex items-center gap-2 bg-bg border border-border rounded-lg px-[11px] py-[7px] text-muted">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[15px] h-[15px]">
                   <circle cx="11" cy="11" r="7" />
@@ -130,11 +145,30 @@ export default function EstoquePage() {
                 <input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por modelo ou placa"
-                  className="bg-transparent outline-none text-[13px] text-navy w-[170px]"
+                  placeholder="Buscar por modelo, placa ou código"
+                  className="bg-transparent outline-none text-[13px] text-navy w-[200px]"
                 />
               </div>
             </div>
+          </div>
+
+          {/* Barra de filtros (combináveis) */}
+          <div className="flex items-center gap-2.5 px-[18px] py-3 border-b border-border bg-[#FAFBFD] flex-wrap">
+            <FiltroSelect value={filtroCor} onChange={setFiltroCor} placeholder="Todas as cores">
+              {cores.map((c) => <option key={c} value={c}>{c}</option>)}
+            </FiltroSelect>
+            <FiltroSelect value={filtroTipo} onChange={setFiltroTipo} placeholder="Todos os tipos">
+              <option value="proprio">Próprio</option>
+              <option value="consignado">Consignado</option>
+            </FiltroSelect>
+            <FiltroSelect value={filtroSit} onChange={setFiltroSit} placeholder="Todas as situações">
+              {situacoesDoModo.map((s) => <option key={s} value={s}>{SIT[s].label}</option>)}
+            </FiltroSelect>
+            {temFiltro && (
+              <button onClick={limparFiltros} className="text-[12.5px] font-semibold text-blue hover:underline px-2">
+                Limpar filtros
+              </button>
+            )}
           </div>
 
           <div className="overflow-x-auto">
@@ -145,17 +179,17 @@ export default function EstoquePage() {
                     <Th key={h}>{h}</Th>
                   ))}
                   <Th r>Venda</Th>
-                  <Th r>Lucro</Th>
+                  {ehDono && <Th r>Lucro</Th>}
                   {mode === 'venda' && <Th>Marcador</Th>}
                   {mode === 'venda' && <Th>{''}</Th>}
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={13} className="px-[14px] py-10 text-center text-muted">Carregando…</td></tr>
+                  <tr><td colSpan={nColunas} className="px-[14px] py-10 text-center text-muted">Carregando…</td></tr>
                 )}
                 {!loading && lista.length === 0 && (
-                  <tr><td colSpan={13} className="px-[14px] py-10 text-center text-muted">Nenhum veículo {mode === 'venda' ? 'à venda' : 'vendido'} ainda.</td></tr>
+                  <tr><td colSpan={nColunas} className="px-[14px] py-10 text-center text-muted">{temFiltro ? 'Nenhum carro corresponde aos filtros.' : `Nenhum veículo ${mode === 'venda' ? 'à venda' : 'vendido'} ainda.`}</td></tr>
                 )}
                 {!loading &&
                   lista.map((v) => {
@@ -188,7 +222,7 @@ export default function EstoquePage() {
                           </span>
                         </Td>
                         <Td r className="num font-medium">{fmt(valorVenda)}</Td>
-                        <Td r className="num font-bold" style={{ color: lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmt(lucro)}</Td>
+                        {ehDono && <Td r className="num font-bold" style={{ color: lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmt(lucro)}</Td>}
                         {mode === 'venda' && (
                           <Td>
                             {v.marcador_texto ? (
@@ -223,9 +257,9 @@ export default function EstoquePage() {
       </div>
 
       {/* Modais */}
-      <AddVeiculoModal open={addOpen} onClose={() => setAddOpen(false)} onSave={onAddSave} />
+      <AddVeiculoModal open={addOpen} ehDono={ehDono} onClose={() => setAddOpen(false)} onSave={onAddSave} />
       <MarcadorModal open={!!marcAlvo} veiculo={marcAlvo} onClose={() => setMarcAlvo(null)} onSave={onMarcSave} onClear={onMarcClear} />
-      <RegistrarVendaModal open={!!vendaAlvo} veiculo={vendaAlvo} custos={vendaAlvo ? custosDe(vendaAlvo) : 0} onClose={() => setVendaAlvo(null)} onConfirm={onVendaConfirm} />
+      <RegistrarVendaModal open={!!vendaAlvo} veiculo={vendaAlvo} custos={vendaAlvo ? custosDe(vendaAlvo) : 0} equipe={equipe} ehDono={ehDono} onClose={() => setVendaAlvo(null)} onConfirm={onVendaConfirm} />
 
       {/* Menu de ações do veículo */}
       <Modal open={!!acoesAlvo} onClose={() => setAcoesAlvo(null)} title={acoesAlvo?.modelo || 'Ações'} maxWidth={340}>
@@ -269,6 +303,15 @@ function Seg({ on, onClick, children }) {
     >
       {children}
     </button>
+  );
+}
+function FiltroSelect({ value, onChange, placeholder, children }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className={['text-[12.5px] font-medium border border-border rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-blue cursor-pointer', value ? 'text-navy' : 'text-muted'].join(' ')}>
+      <option value="">{placeholder}</option>
+      {children}
+    </select>
   );
 }
 function Th({ children, r }) {

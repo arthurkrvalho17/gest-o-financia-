@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos, demoVendas } from '../estoque/demoData';
-import { totalPrepDemo, allGastosDemo } from '../preparacao/demoPrep';
+import { totalPrepDemo, allGastosDemo, gastosDemo } from '../preparacao/demoPrep';
 import { despesasDemo, setDespesasDemo, novaDespesaDemo } from './demoFin';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
@@ -31,7 +31,7 @@ export function useFinanceiro() {
     const [{ data: vs }, { data: vd }, { data: gs }, { data: ds }] = await Promise.all([
       supabase.from('veiculos').select('*'),
       supabase.from('vendas').select('*'),
-      supabase.from('preparacao_gastos').select('veiculo_id, valor, data'),
+      supabase.from('preparacao_gastos').select('veiculo_id, valor, data, descricao'),
       supabase.from('despesas').select('*'),
     ]);
     setVeiculos(vs || []);
@@ -73,9 +73,19 @@ export function useFinanceiro() {
         const veic = veiculos.find((x) => x.id === v.veiculo_id) || {};
         const custos = custosDe(veic);
         const lucro = (Number(v.valor_venda) || 0) - (Number(veic.compra) || 0) - custos;
-        return { modelo: veic.modelo || '—', valorVenda: v.valor_venda, compra: veic.compra || 0, custos, lucro };
+        return { veic, modelo: veic.modelo || '—', valorVenda: v.valor_venda, compra: veic.compra || 0, custos, lucro };
       }),
     [vendasDoMes, veiculos, custosDe]
+  );
+
+  // Itens de preparação de um carro (para o detalhe do lucro).
+  const gastosPrepDe = useCallback(
+    (veic) => {
+      if (!veic) return [];
+      if (demo) return gastosDemo(veic.codigo);
+      return prepGastos.filter((g) => g.veiculo_id === veic.id);
+    },
+    [demo, prepGastos]
   );
 
   const preparacaoDoMes = useCallback(
@@ -135,7 +145,7 @@ export function useFinanceiro() {
 
   return {
     demo, loading,
-    custosDe, vendasDoMes, faturamentoDoMes, lucroPorCarroDoMes, preparacaoDoMes,
+    custosDe, vendasDoMes, faturamentoDoMes, lucroPorCarroDoMes, preparacaoDoMes, gastosPrepDe,
     despesasDe, totalDespesas, addDespesa, updateDespesa, delDespesa,
   };
 }

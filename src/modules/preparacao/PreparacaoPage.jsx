@@ -105,7 +105,7 @@ function DetalheCarro({ prep, veic, onVoltar }) {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
               <thead>
-                <tr>
+                <tr className="bg-[#F4F7FB]">
                   <Th>#</Th><Th>Descrição do gasto</Th><Th>Data</Th><Th>Forma de pgto</Th>
                   <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Observações</Th><Th>{''}</Th>
                 </tr>
@@ -115,7 +115,7 @@ function DetalheCarro({ prep, veic, onVoltar }) {
                   <tr><td colSpan={8} className="px-[14px] py-8 text-center text-muted">Sem gastos lançados. Use "Adicionar gasto".</td></tr>
                 )}
                 {itens.map((x, i) => (
-                  <tr key={x.id} className="border-b border-border">
+                  <tr key={x.id} className="border-b border-border odd:bg-[#FAFBFD] hover:bg-blue-soft/50">
                     <SheetTd className="num text-muted-2">{i + 1}</SheetTd>
                     <SheetTd>
                       <CellInput value={x.descricao} onChange={(v) => prep.updateGasto(veic, x, { descricao: v })} placeholder="Descrição" />

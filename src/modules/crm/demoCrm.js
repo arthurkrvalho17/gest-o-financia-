@@ -3,13 +3,13 @@
 const uid = () =>
   globalThis.crypto?.randomUUID?.() || 'demo-' + Math.random().toString(36).slice(2);
 
-// Etapas do funil (alinhadas ao schema: novo|contato|proposta|fechado|perdido)
+// Etapas do funil (financiamento): novo|conversa|simulacao|ficha|fechado
 export const ETAPAS = [
   { key: 'novo', label: 'Novo lead', accent: '#94A3B8' },
-  { key: 'contato', label: 'Em conversa', accent: '#185FA5' },
-  { key: 'proposta', label: 'Proposta enviada', accent: '#7C3AED' },
-  { key: 'fechado', label: 'Fechado', accent: '#15803D' },
-  { key: 'perdido', label: 'Perdido', accent: '#B91C1C' },
+  { key: 'conversa', label: 'Em conversa', accent: '#185FA5' },
+  { key: 'simulacao', label: 'Simulação enviada', accent: '#7C3AED' },
+  { key: 'ficha', label: 'Ficha aprovada', accent: '#15803D' },
+  { key: 'fechado', label: 'Fechado', accent: '#0A1628' },
 ];
 
 export const ORIGENS = {
@@ -33,15 +33,15 @@ const l = (nome, telefone, origem, etapa, carLabel, valor, diaJunho) => ({
 let leadsStore = [
   l('Marcos Vinícius', '(11) 90000-0001', 'whatsapp', 'novo', 'Onix 1.0 LT', 67900, 14),
   l('Patrícia Gomes', '(11) 90000-0002', 'portal', 'novo', 'HB20 Comfort', 61500, 13),
-  l('Roberto Dias', '(11) 90000-0003', 'portal', 'contato', 'Corolla XEI', 104900, 12),
-  l('Juliana Reis', '(11) 90000-0004', 'indicacao', 'contato', 'Nivus', 112000, 11),
-  l('Anderson Luz', '(11) 90000-0005', 'whatsapp', 'proposta', 'Renegade Sport', 92900, 10),
-  l('Camila Souza', '(11) 90000-0006', 'balcao', 'proposta', 'Duster Iconic', 84500, 9),
-  l('Felipe Antunes', '(11) 90000-0007', 'whatsapp', 'proposta', 'Pulse Drive', 81900, 8),
+  l('Roberto Dias', '(11) 90000-0003', 'portal', 'conversa', 'Corolla XEI', 104900, 12),
+  l('Juliana Reis', '(11) 90000-0004', 'indicacao', 'conversa', 'Nivus', 112000, 11),
+  l('Anderson Luz', '(11) 90000-0005', 'whatsapp', 'simulacao', 'Renegade Sport', 92900, 10),
+  l('Camila Souza', '(11) 90000-0006', 'balcao', 'ficha', 'Duster Iconic', 84500, 9),
+  l('Felipe Antunes', '(11) 90000-0007', 'whatsapp', 'ficha', 'Pulse Drive', 81900, 8),
   l('Sandra Mello', '(11) 90000-0008', 'portal', 'fechado', 'Civic Touring', 139900, 6),
   l('Bruno Carvalho', '(11) 90000-0009', 'whatsapp', 'novo', 'Tracker Premier', 114900, 15),
-  l('Tatiane Lopes', '(11) 90000-0010', 'indicacao', 'contato', 'Creta Action', 118500, 9),
-  l('Ricardo Penha', '(11) 90000-0011', 'balcao', 'perdido', 'Golf Highline', 64900, 5),
+  l('Tatiane Lopes', '(11) 90000-0010', 'indicacao', 'conversa', 'Creta Action', 118500, 9),
+  l('Ricardo Penha', '(11) 90000-0011', 'balcao', 'simulacao', 'Golf Highline', 64900, 5),
   l('Aline Ferraz', '(11) 90000-0012', 'whatsapp', 'fechado', 'HB20 Comfort', 61500, 2),
 ];
 

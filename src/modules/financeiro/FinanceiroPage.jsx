@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Topbar } from '../../components/Layout';
+import Modal from '../../components/Modal';
 import { fmt, brl, fmtSinal, fmtR } from '../../lib/format';
 import { useFinanceiro } from './useFinanceiro';
 import { mesesPassados, NOMES_MES } from './demoFin';
@@ -22,9 +23,8 @@ export default function FinanceiroPage() {
       faturamento: fin.faturamentoDoMes(MES_ATUAL),
       vendas: fin.vendasDoMes(MES_ATUAL).length,
       preparacao: fin.preparacaoDoMes(MES_ATUAL),
-      carros: carros.map((c) => ({ modelo: c.modelo, lucro: c.lucro, calc: `${fmt(c.valorVenda)} − ${fmt(c.compra)} − ${fmt(c.custos)}` })),
+      carros: carros.map((c) => ({ veic: c.veic, modelo: c.modelo, lucro: c.lucro, compra: c.compra, valorVenda: c.valorVenda, custos: c.custos, calc: `${fmt(c.valorVenda)} − ${fmt(c.compra)} − ${fmt(c.custos)}` })),
       lucroVendidos: carros.reduce((s, c) => s + c.lucro, 0),
-      contasReceber: fin.vendasDoMes(MES_ATUAL).filter((v) => ['financiamento', 'consorcio'].includes(v.forma_pagamento)).reduce((s, v) => s + (Number(v.valor_venda) || 0), 0),
     };
   }, [fin]);
 
@@ -83,6 +83,7 @@ export default function FinanceiroPage() {
 }
 
 function ResumoMes({ titulo, sub, fin, dados, demo, isOverview, onAbrirCategoria, onVoltar, historico }) {
+  const [carroDet, setCarroDet] = useState(null);
   const fixas = fin.totalDespesas(dados.mes, 'fixa');
   const outras = fin.totalDespesas(dados.mes, 'outra');
   const prep = dados.preparacao;
@@ -106,14 +107,11 @@ function ResumoMes({ titulo, sub, fin, dados, demo, isOverview, onAbrirCategoria
           </div>
         )}
 
-        {/* KPIs */}
-        <div className="grid grid-cols-4 gap-3.5 mb-[18px] max-[1000px]:grid-cols-2">
+        {/* KPIs — ordem fixa: Faturamento → Lucro → Gasto total */}
+        <div className="grid grid-cols-3 gap-3.5 mb-[18px] max-[1000px]:grid-cols-1">
           <Kpi tom="blue" label="Faturamento do mês" valor={fmtR(dados.faturamento)} foot={`${dados.vendas} ${dados.vendas === 1 ? 'carro vendido' : 'carros vendidos'}`} />
-          <Kpi tom="amber" label="Gasto total do mês" valor={fmtR(gastoTotal)} foot="fixas + preparação + outras" />
           <Kpi tom={resultado < 0 ? 'red' : 'green'} label="Lucro do mês" valor={fmtSinal(resultado)} foot="depois das despesas" />
-          {isOverview
-            ? <Kpi label="Contas a receber" valor={fmtR(dados.contasReceber || 0)} foot="financiamentos a creditar" />
-            : <Kpi label="Vendas" valor={dados.vendas} foot="no mês" />}
+          <Kpi tom="amber" label="Gasto total do mês" valor={fmtR(gastoTotal)} foot="fixas + preparação + outras" />
         </div>
 
         <div className="grid grid-cols-2 gap-[18px] mb-[18px] max-[1000px]:grid-cols-1">
@@ -133,15 +131,22 @@ function ResumoMes({ titulo, sub, fin, dados, demo, isOverview, onAbrirCategoria
           <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
             <PanelHead titulo="Lucro por carro vendido" hint="no mês" />
             {dados.carros.length === 0 && <div className="px-[18px] py-8 text-center text-muted text-[13px]">Nenhuma venda neste mês.</div>}
-            {dados.carros.map((c, i) => (
-              <div key={i} className="flex items-center justify-between px-[18px] py-3 border-b border-border last:border-b-0">
-                <div>
-                  <div className="font-semibold text-[13px]">{c.modelo}</div>
-                  {c.calc && <div className="text-[11.5px] text-muted-2 mt-px num">{c.calc}</div>}
+            {dados.carros.map((c, i) => {
+              const clicavel = !!c.veic;
+              return (
+                <div key={i} onClick={clicavel ? () => setCarroDet(c) : undefined}
+                  className={['flex items-center justify-between px-[18px] py-3 border-b border-border last:border-b-0', clicavel ? 'cursor-pointer hover:bg-blue-soft' : ''].join(' ')}>
+                  <div>
+                    <div className="font-semibold text-[13px] flex items-center gap-1.5">
+                      {c.modelo}
+                      {clicavel && <span className="text-[11px] text-blue font-semibold">ver conta ▸</span>}
+                    </div>
+                    {c.calc && <div className="text-[11.5px] text-muted-2 mt-px num">{c.calc}</div>}
+                  </div>
+                  <div className="font-bold num" style={{ color: c.lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmtSinal(c.lucro)}</div>
                 </div>
-                <div className="font-bold num" style={{ color: c.lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmtSinal(c.lucro)}</div>
-              </div>
-            ))}
+              );
+            })}
             <div className="flex justify-between px-[18px] py-[15px] border-t border-border bg-bg">
               <span className="font-semibold">Resultado da loja no mês</span>
               <span className="font-extrabold text-[17px] num" style={{ color: resultado < 0 ? '#B91C1C' : '#15803D' }}>{fmtSinal(resultado)}</span>
@@ -152,7 +157,53 @@ function ResumoMes({ titulo, sub, fin, dados, demo, isOverview, onAbrirCategoria
 
         {historico}
       </div>
+
+      <CarroDetalheModal carro={carroDet} fin={fin} onClose={() => setCarroDet(null)} />
     </>
+  );
+}
+
+// Detalhe do lucro de um carro vendido — explica a conta na frente do dono.
+function CarroDetalheModal({ carro, fin, onClose }) {
+  if (!carro) return null;
+  const itens = fin.gastosPrepDe(carro.veic);
+  return (
+    <Modal open={!!carro} onClose={onClose} title={carro.modelo} maxWidth={460}>
+      <div className="flex flex-col gap-2.5 text-[13.5px]">
+        <Linha rotulo="Comprei por" valor={fmt(carro.compra)} />
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted">Gastei na preparação</span>
+            <b className="num">{fmt(carro.custos)}</b>
+          </div>
+          <div className="mt-1.5 rounded-lg border border-border overflow-hidden">
+            {itens.length === 0 && <div className="px-3 py-2 text-[12px] text-muted-2">Sem gastos de preparação.</div>}
+            {itens.map((g, i) => (
+              <div key={g.id || i} className="flex items-center justify-between px-3 py-1.5 text-[12.5px] odd:bg-[#FAFBFD] border-b border-border last:border-b-0">
+                <span>{g.descricao || 'Gasto'}</span>
+                <span className="num text-muted">{fmt(g.valor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <Linha rotulo="Vendi por" valor={fmt(carro.valorVenda)} />
+        <div className="flex items-center justify-between pt-2.5 mt-1 border-t border-border">
+          <div>
+            <div className="font-semibold">Lucro deste carro</div>
+            <div className="text-[11.5px] text-muted-2 num">{fmt(carro.valorVenda)} − {fmt(carro.compra)} − {fmt(carro.custos)}</div>
+          </div>
+          <b className="text-[20px] font-extrabold num" style={{ color: carro.lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmtSinal(carro.lucro)}</b>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+function Linha({ rotulo, valor }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted">{rotulo}</span>
+      <b className="num">{valor}</b>
+    </div>
   );
 }
 

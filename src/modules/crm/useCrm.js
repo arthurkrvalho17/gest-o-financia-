@@ -56,7 +56,7 @@ export function useCrm() {
   const leadsMes = leads.filter((x) => mesDe(x.criado_em) === MES_ATUAL).length;
   const vendasMes = vendas.filter((x) => mesDe(x.data_venda) === MES_ATUAL).length;
   const conversao = leadsMes > 0 ? Math.round((vendasMes / leadsMes) * 100) + '%' : '0%';
-  const negociosAbertos = leads.filter((x) => ['novo', 'contato', 'proposta'].includes(x.etapa)).length;
+  const negociosAbertos = leads.filter((x) => ['novo', 'conversa', 'simulacao', 'ficha'].includes(x.etapa)).length;
 
   function leadsPorEtapa(etapa) {
     return leads.filter((x) => x.etapa === etapa);

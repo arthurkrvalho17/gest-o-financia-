@@ -18,7 +18,7 @@ function Carregando() {
 }
 
 export default function App() {
-  const { session, carregando } = useAuth();
+  const { session, carregando, ehDono } = useAuth();
 
   if (carregando) return <Carregando />;
 
@@ -40,7 +40,7 @@ export default function App() {
         <Route path="/estoque" element={<EstoquePage />} />
         <Route path="/preparacao" element={<PreparacaoPage />} />
         <Route path="/crm" element={<CrmPage />} />
-        <Route path="/financeiro" element={<FinanceiroPage />} />
+        <Route path="/financeiro" element={ehDono ? <FinanceiroPage /> : <Navigate to="/estoque" replace />} />
         <Route path="/contratos" element={<ContratosPage />} />
         <Route path="*" element={<Navigate to="/estoque" replace />} />
       </Route>
