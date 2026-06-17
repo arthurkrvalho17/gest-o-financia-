@@ -17,10 +17,10 @@ dados reais da loja com login e isolamento por RLS.
 
 ## Rodar localmente
 
-Pré-requisito: Node.js (instalado via nvm).
+Pré-requisito: Node.js (instalado via nvm). A versão está pinada em `.nvmrc`.
 
 ```bash
-nvm use default      # ou: nvm install --lts
+nvm use              # usa a versão do .nvmrc (instale com: nvm install)
 npm install
 npm run dev          # http://localhost:5173
 ```
@@ -34,8 +34,9 @@ npm run dev          # http://localhost:5173
    VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
    VITE_SUPABASE_ANON_KEY=sua-anon-public-key
    ```
-4. No Supabase, abra **SQL Editor** e rode, **na ordem**, todas as migrations da
-   pasta `supabase/migrations/`:
+4. No Supabase, abra **SQL Editor**. Atalho: cole o arquivo único
+   **`supabase/setup.sql`** (já tem todas as fases na ordem) e rode de uma vez.
+   Se preferir por partes, rode **na ordem** as migrations de `supabase/migrations/`:
    - `0000_fase0_fundacao.sql` — lojas, usuarios, `loja_do_usuario()`, trigger de cadastro, RLS
    - `0001_fase1_estoque.sql` — veiculos, vendas
    - `0002_fase2_preparacao.sql` — preparacao_gastos
