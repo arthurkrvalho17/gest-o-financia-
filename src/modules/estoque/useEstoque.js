@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { hojeISO } from '../../lib/format';
-import { demoCustos, demoVeiculos, demoVendas } from './demoData';
+import { demoVeiculos, demoVendas } from './demoData';
+import { totalPrepDemo } from '../preparacao/demoPrep';
 
 // Camada de dados do Estoque.
 // - Supabase configurado  -> lê/escreve nas tabelas veiculos e vendas (RLS por loja).
@@ -14,6 +15,7 @@ export function useEstoque() {
 
   const [veiculos, setVeiculos] = useState([]);
   const [vendas, setVendas] = useState([]);
+  const [custosMap, setCustosMap] = useState({}); // veiculo_id -> soma da preparação (modo real)
   const [loading, setLoading] = useState(true);
 
   const carregar = useCallback(async () => {
@@ -24,12 +26,17 @@ export function useEstoque() {
       return;
     }
     setLoading(true);
-    const [{ data: vs }, { data: vd }] = await Promise.all([
+    const [{ data: vs }, { data: vd }, { data: gs }] = await Promise.all([
       supabase.from('veiculos').select('*').order('entrada', { ascending: false }),
       supabase.from('vendas').select('*'),
+      supabase.from('preparacao_gastos').select('veiculo_id, valor'),
     ]);
     setVeiculos(vs || []);
     setVendas(vd || []);
+    // Custo de cada carro = soma dos gastos de preparação (fonte única).
+    const m = {};
+    for (const g of gs || []) m[g.veiculo_id] = (m[g.veiculo_id] || 0) + (Number(g.valor) || 0);
+    setCustosMap(m);
     setLoading(false);
   }, [demo]);
 
@@ -37,11 +44,11 @@ export function useEstoque() {
     carregar();
   }, [carregar]);
 
-  // Custo de preparação do carro (Fase 2). Por ora: demo usa os valores do
-  // protótipo; no modo real ainda é 0 até a Fase 2 somar preparacao_gastos.
+  // Custo de preparação do carro = soma de preparacao_gastos do veículo (Fase 2).
+  // Lucro nunca é guardado fixo; o custo vem sempre desta fonte única.
   const custosDe = useCallback(
-    (veic) => (demo ? demoCustos[veic?.codigo] || 0 : 0),
-    [demo]
+    (veic) => (demo ? totalPrepDemo(veic?.codigo) : custosMap[veic?.id] || 0),
+    [demo, custosMap]
   );
 
   async function addVeiculo(dados) {
