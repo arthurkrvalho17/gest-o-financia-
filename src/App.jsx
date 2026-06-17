@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
+import { supabaseConfigurado } from './lib/supabase';
 import Login from './auth/Login';
 import Layout from './components/Layout';
 import EstoquePage from './modules/estoque/EstoquePage';
@@ -21,8 +22,9 @@ export default function App() {
 
   if (carregando) return <Carregando />;
 
-  // Sem sessão: só a tela de login.
-  if (!session) {
+  // Sem sessão (e com Supabase configurado): só a tela de login.
+  // Sem Supabase, o app entra em modo demonstração.
+  if (!session && supabaseConfigurado) {
     return (
       <Routes>
         <Route path="*" element={<Login />} />

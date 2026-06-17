@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseConfigurado } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 
@@ -37,6 +37,15 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let ativo = true;
+
+    // Modo demonstração: sem Supabase configurado, libera o app com uma
+    // loja fictícia para a interface ser navegável antes de plugar o backend.
+    if (!supabaseConfigurado) {
+      setLoja({ id: 'demo', nome: 'Loja Demonstração' });
+      setUsuario({ id: 'demo', loja_id: 'demo', nome: 'Você (demo)', papel: 'dono' });
+      setCarregando(false);
+      return () => {};
+    }
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (!ativo) return;
