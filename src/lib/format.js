@@ -11,6 +11,12 @@ export const brl = (n) =>
     maximumFractionDigits: 2,
   });
 
+// Valor com sinal explícito e arredondado: -4775 -> "− R$ 4.775" ; 8900 -> "+ R$ 8.900"
+export const fmtSinal = (n) => (Number(n) < 0 ? '− ' : '+ ') + 'R$ ' + Math.round(Math.abs(Number(n) || 0)).toLocaleString('pt-BR');
+
+// R$ arredondado (sem centavos), para KPIs e totais consolidados
+export const fmtR = (n) => 'R$ ' + Math.round(Number(n) || 0).toLocaleString('pt-BR');
+
 // "1.234,56" (string digitada) -> 1234.56 (number)
 export const parseBR = (s) =>
   parseFloat(

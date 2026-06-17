@@ -60,3 +60,11 @@ export function totalPrepDemo(codigo) {
 export function novoGastoDemo() {
   return g('', '', '', 0, 'pendente');
 }
+
+// Todos os gastos de preparação (achatados, com o código do carro) — usado
+// pelo Financeiro para consolidar a preparação do mês pela data de cada gasto.
+export function allGastosDemo() {
+  return Object.entries(prepStore).flatMap(([codigo, arr]) =>
+    arr.map((x) => ({ ...x, codigo }))
+  );
+}
