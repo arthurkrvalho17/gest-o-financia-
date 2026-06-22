@@ -8,6 +8,7 @@ import {
   IconContratos,
   IconNotaFiscal,
   IconFinanciamento,
+  IconConexoes,
   IconSair,
 } from './icons';
 
@@ -17,10 +18,11 @@ const itensOperacao = [
   { to: '/crm', label: 'CRM', Icon: IconCrm },
 ];
 
-// Financeiro é só do dono (soDono: true).
+// Financeiro e Conexões são só do dono (soDono: true).
 const itensGestao = [
   { to: '/financeiro', label: 'Financeiro', Icon: IconFinanceiro, soDono: true },
   { to: '/contratos', label: 'Contratos', Icon: IconContratos },
+  { to: '/conexoes', label: 'Conexões', Icon: IconConexoes, soDono: true },
 ];
 
 function iniciais(nome) {

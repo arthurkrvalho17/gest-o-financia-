@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVendas, demoVeiculos } from '../estoque/demoData';
-import { leadsDemo, setLeadsDemo, novoLeadDemo, posVendaDemo, historicoCrm } from './demoCrm';
+import { leadsDemo, setLeadsDemo, novoLeadDemo, posVendaDemo, historicoCrm, conversasDemo, enviarMensagemDemo } from './demoCrm';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
 const MES_ATUAL = new Date().toISOString().slice(0, 7);
@@ -104,9 +104,24 @@ export function useCrm() {
   // Histórico: demo usa seed; real agrega leads x vendas por mês (últimos meses).
   const historico = demo ? historicoCrm : historicoReal(leads, vendas);
 
+  // Conversas (inbox) — cada conversa resolve o lead pelo nome (demo).
+  void tick;
+  const conversas = demo
+    ? conversasDemo().map((c) => ({ ...c, lead: leads.find((l) => l.nome === c.leadNome) || null }))
+    : [];
+
+  function enviarMensagem(conversa, texto, tipo = 'texto') {
+    if (demo) {
+      enviarMensagemDemo(conversa.id, texto, tipo);
+      setTick((t) => t + 1);
+    }
+    // real: insert em "mensagem" + envio via getConectorMensageria (fase futura)
+  }
+
   return {
     demo, loading, leads, leadsMes, conversao, negociosAbertos,
     leadsPorEtapa, moverLead, addLead, veiculos, posVenda, historico,
+    conversas, enviarMensagem,
   };
 }
 

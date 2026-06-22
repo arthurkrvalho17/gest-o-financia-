@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext';
 import AddVeiculoModal from './AddVeiculoModal';
 import RegistrarVendaModal from './RegistrarVendaModal';
 import MarcadorModal from './MarcadorModal';
+import PublicarModal from './PublicarModal';
 
 const SIT = {
   estoque: { label: 'Estoque', cls: 'bg-green-soft text-green', dot: '#15803D' },
@@ -21,7 +22,7 @@ const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
 
 export default function EstoquePage() {
   const toast = useToast();
-  const { ehDono } = useAuth();
+  const { ehDono, loja } = useAuth();
   const { veiculos, vendas, equipe, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda } =
     useEstoque();
 
@@ -34,6 +35,7 @@ export default function EstoquePage() {
   const [marcAlvo, setMarcAlvo] = useState(null);
   const [vendaAlvo, setVendaAlvo] = useState(null);
   const [acoesAlvo, setAcoesAlvo] = useState(null);
+  const [pubAlvo, setPubAlvo] = useState(null);
 
   const vendaPorVeiculo = useMemo(() => {
     const m = {};
@@ -265,6 +267,7 @@ export default function EstoquePage() {
       <AddVeiculoModal open={addOpen} ehDono={ehDono} onClose={() => setAddOpen(false)} onSave={onAddSave} />
       <MarcadorModal open={!!marcAlvo} veiculo={marcAlvo} onClose={() => setMarcAlvo(null)} onSave={onMarcSave} onClear={onMarcClear} />
       <RegistrarVendaModal open={!!vendaAlvo} veiculo={vendaAlvo} custos={vendaAlvo ? custosDe(vendaAlvo) : 0} equipe={equipe} ehDono={ehDono} onClose={() => setVendaAlvo(null)} onConfirm={onVendaConfirm} />
+      <PublicarModal open={!!pubAlvo} veiculo={pubAlvo} config={{ assinatura_nome: loja?.nome }} onClose={() => setPubAlvo(null)} onToast={toast} />
 
       {/* Menu de ações do veículo */}
       <Modal open={!!acoesAlvo} onClose={() => setAcoesAlvo(null)} title={acoesAlvo?.modelo || 'Ações'} maxWidth={340}>
@@ -272,6 +275,10 @@ export default function EstoquePage() {
           <AcBtn primary onClick={() => { const a = acoesAlvo; setAcoesAlvo(null); setVendaAlvo(a); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
             Registrar venda
+          </AcBtn>
+          <AcBtn onClick={() => { const a = acoesAlvo; setAcoesAlvo(null); setPubAlvo(a); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20" /></svg>
+            Publicar / status
           </AcBtn>
           <AcBtn onClick={() => { const a = acoesAlvo; setAcoesAlvo(null); setMarcAlvo(a); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.6 13.4L13.4 20.6a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V4a1 1 0 011-1h7.8a2 2 0 011.4.6l7.6 7.6a2 2 0 010 2.6z" /><circle cx="7.5" cy="7.5" r="1" /></svg>

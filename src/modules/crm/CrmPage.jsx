@@ -4,7 +4,7 @@ import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { fmt } from '../../lib/format';
 import { useCrm } from './useCrm';
-import { ETAPAS, ORIGENS } from './demoCrm';
+import { ETAPAS, ORIGENS, TEMPLATES_HSM } from './demoCrm';
 
 export default function CrmPage() {
   const crm = useCrm();
@@ -57,6 +57,9 @@ export default function CrmPage() {
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div className="flex gap-1">
             <SubTab on={aba === 'neg'} onClick={() => setAba('neg')}>Negociações</SubTab>
+            <SubTab on={aba === 'conversas'} onClick={() => setAba('conversas')}>
+              Conversas {crm.conversas.length > 0 && <span className="ml-1 text-[10px] bg-green text-white rounded-full px-1.5 py-px align-middle">{crm.conversas.length}</span>}
+            </SubTab>
             <SubTab on={aba === 'pos'} onClick={() => setAba('pos')}>Pós-venda</SubTab>
           </div>
           <button onClick={() => setHist(true)} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
@@ -96,6 +99,8 @@ export default function CrmPage() {
               );
             })}
           </div>
+        ) : aba === 'conversas' ? (
+          <Conversas crm={crm} />
         ) : (
           <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
             <div className="flex items-center justify-between px-[18px] py-[15px] border-b border-border">
@@ -203,6 +208,106 @@ function AddLeadModal({ open, veiculos, demo, onClose, onSave }) {
       </div>
       <style>{`.inp{font-size:13.5px;padding:9px 11px;border:1px solid var(--bd,#E2E8F0);border-radius:8px;outline:none;background:#fff;width:100%}.inp:focus{border-color:#185FA5}`}</style>
     </Modal>
+  );
+}
+
+// Inbox de Conversas (WhatsApp) — amarrado ao lead; troca a etapa pela conversa;
+// respeita a janela de 24h (fora dela, só templates HSM).
+function Conversas({ crm }) {
+  const [selId, setSelId] = useState(crm.conversas[0]?.id || null);
+  const [texto, setTexto] = useState('');
+  const [template, setTemplate] = useState('');
+  const conversa = crm.conversas.find((c) => c.id === selId) || crm.conversas[0];
+
+  if (crm.conversas.length === 0) {
+    return <div className="bg-white border border-border rounded-card shadow-card px-[18px] py-10 text-center text-muted text-[13px]">Nenhuma conversa ainda. Conecte o WhatsApp em Conexões.</div>;
+  }
+
+  function enviar() {
+    if (!texto.trim()) return;
+    crm.enviarMensagem(conversa, texto.trim());
+    setTexto('');
+  }
+  function enviarTemplate() {
+    if (!template) return;
+    crm.enviarMensagem(conversa, template, 'template');
+    setTemplate('');
+  }
+
+  return (
+    <div className="grid grid-cols-[300px_1fr] gap-0 bg-white border border-border rounded-card shadow-card overflow-hidden max-[900px]:grid-cols-1" style={{ minHeight: 460 }}>
+      {/* Lista */}
+      <div className="border-r border-border max-[900px]:border-r-0 max-[900px]:border-b overflow-y-auto">
+        {crm.conversas.map((c) => (
+          <button key={c.id} onClick={() => setSelId(c.id)}
+            className={['w-full text-left px-3.5 py-3 border-b border-border flex gap-2.5 items-start', c.id === conversa.id ? 'bg-blue-soft' : 'hover:bg-bg'].join(' ')}>
+            <div className="w-8 h-8 rounded-full bg-[#25D366] text-white grid place-items-center text-[11px] font-bold flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2a10 10 0 00-8.6 15l-1.4 5 5.1-1.3A10 10 0 1012 2z" /></svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1">
+                <span className="font-semibold text-[13px] truncate">{c.leadNome}</span>
+                <span className="text-[10.5px] text-muted-2 flex-shrink-0">{c.ultima}</span>
+              </div>
+              <div className="text-[11.5px] text-muted-2 truncate">{c.mensagens[c.mensagens.length - 1]?.txt}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Thread */}
+      <div className="flex flex-col" style={{ minHeight: 460 }}>
+        <div className="flex items-center justify-between gap-3 px-[18px] py-3 border-b border-border flex-wrap">
+          <div>
+            <div className="font-semibold text-[14px]">{conversa.leadNome}</div>
+            <div className="text-[11.5px] text-muted-2">{conversa.telefone} · WhatsApp</div>
+          </div>
+          {conversa.lead && (
+            <label className="flex items-center gap-2 text-[11.5px] text-muted">
+              Etapa:
+              <select value={conversa.lead.etapa} onChange={(e) => crm.moverLead(conversa.lead, e.target.value)}
+                className="text-[12.5px] font-semibold border border-border rounded-lg px-2 py-1.5 bg-white outline-none focus:border-blue cursor-pointer">
+                {ETAPAS.map((et) => <option key={et.key} value={et.key}>{et.label}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-[18px] py-4 flex flex-col gap-2 bg-[#FAFBFD]">
+          {conversa.mensagens.map((m) => (
+            <div key={m.id} className={['max-w-[75%] px-3 py-2 rounded-xl text-[13px]',
+              m.dir === 'out' ? 'self-end bg-[#DCF8C6] text-navy rounded-br-sm' : 'self-start bg-white border border-border rounded-bl-sm'].join(' ')}>
+              {m.tipo === 'template' && <div className="text-[9.5px] font-bold text-blue uppercase tracking-wide mb-0.5">Template</div>}
+              {m.txt}
+              <div className="text-[9.5px] text-muted-2 mt-0.5 text-right">{m.hora}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Composer — respeita a janela de 24h */}
+        {conversa.janelaAberta ? (
+          <div className="flex items-center gap-2 p-3 border-t border-border">
+            <input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && enviar()}
+              placeholder="Escreva uma mensagem…" className="flex-1 text-[13px] px-3 py-2.5 border border-border rounded-lg outline-none focus:border-blue" />
+            <button onClick={enviar} className="bg-blue hover:bg-blue-hover text-white font-semibold text-[13px] px-4 py-2.5 rounded-lg">Enviar</button>
+          </div>
+        ) : (
+          <div className="p-3 border-t border-border">
+            <div className="text-[11.5px] text-amber bg-amber-soft rounded-lg px-3 py-2 mb-2 leading-snug">
+              ⏳ Fora da janela de 24h — só é possível enviar <b>mensagens de template aprovadas (HSM)</b>.
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={template} onChange={(e) => setTemplate(e.target.value)}
+                className="flex-1 text-[12.5px] px-3 py-2.5 border border-border rounded-lg outline-none focus:border-blue bg-white">
+                <option value="">— escolher template —</option>
+                {TEMPLATES_HSM.map((t, i) => <option key={i} value={t}>{t.slice(0, 50)}…</option>)}
+              </select>
+              <button onClick={enviarTemplate} className="bg-blue hover:bg-blue-hover text-white font-semibold text-[13px] px-4 py-2.5 rounded-lg">Enviar</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

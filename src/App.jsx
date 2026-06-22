@@ -8,6 +8,7 @@ import PreparacaoPage from './modules/preparacao/PreparacaoPage';
 import CrmPage from './modules/crm/CrmPage';
 import FinanceiroPage from './modules/financeiro/FinanceiroPage';
 import ContratosPage from './modules/contratos/ContratosPage';
+import ConexoesPage from './modules/conexoes/ConexoesPage';
 
 function Carregando() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/crm" element={<CrmPage />} />
         <Route path="/financeiro" element={ehDono ? <FinanceiroPage /> : <Navigate to="/estoque" replace />} />
         <Route path="/contratos" element={<ContratosPage />} />
+        <Route path="/conexoes" element={ehDono ? <ConexoesPage /> : <Navigate to="/estoque" replace />} />
         <Route path="*" element={<Navigate to="/estoque" replace />} />
       </Route>
     </Routes>

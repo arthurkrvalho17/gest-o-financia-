@@ -62,6 +62,52 @@ export const posVendaDemo = [
   { nome: 'Larissa Costa', carro: 'Creta Action · 19/05', steps: [['Entrega', 'ok'], ['Transferência', 'ok'], ['Avaliação', 'ok'], ['Indicação', 'ok']] },
 ];
 
+// Conversas (WhatsApp) — inbox demo, cada uma amarrada a um lead pelo nome.
+// Desenhado omnichannel: 'canal' é whatsapp hoje, mas pode ser outro depois.
+const mkMsg = (dir, txt, hora) => ({ id: uid(), dir, txt, hora });
+let conversasStore = [
+  {
+    id: uid(), leadNome: 'Roberto Dias', telefone: '(11) 90000-0003', canal: 'whatsapp',
+    janelaAberta: true, ultima: '10:42',
+    mensagens: [
+      mkMsg('in', 'Boa tarde! O Corolla XEI ainda está disponível?', '10:30'),
+      mkMsg('out', 'Olá Roberto! Está sim 👍 Quer agendar um test drive?', '10:35'),
+      mkMsg('in', 'Quero. Consigo amanhã de manhã?', '10:42'),
+    ],
+  },
+  {
+    id: uid(), leadNome: 'Juliana Reis', telefone: '(11) 90000-0004', canal: 'whatsapp',
+    janelaAberta: true, ultima: '09:15',
+    mensagens: [
+      mkMsg('in', 'Vi o Nivus no anúncio, qual o valor à vista?', '09:10'),
+      mkMsg('out', 'Bom dia Juliana! Faço por R$ 112.000 à vista.', '09:15'),
+    ],
+  },
+  {
+    id: uid(), leadNome: 'Anderson Luz', telefone: '(11) 90000-0005', canal: 'whatsapp',
+    janelaAberta: false, ultima: 'ontem',
+    mensagens: [
+      mkMsg('in', 'Mandei meus documentos pra simulação', 'ontem'),
+      mkMsg('out', 'Recebido! Já te retorno com as parcelas.', 'ontem'),
+    ],
+  },
+];
+export const TEMPLATES_HSM = [
+  'Olá! Passando para retomar nossa conversa sobre o veículo. Posso ajudar?',
+  'Sua simulação de financiamento está pronta. Quando posso te ligar?',
+  'O veículo que você viu ainda está disponível. Quer agendar uma visita?',
+];
+export function conversasDemo() {
+  return conversasStore;
+}
+export function enviarMensagemDemo(conversaId, txt, tipo = 'texto') {
+  conversasStore = conversasStore.map((c) =>
+    c.id === conversaId
+      ? { ...c, mensagens: [...c.mensagens, { id: uid(), dir: 'out', txt, hora: 'agora', tipo }], ultima: 'agora' }
+      : c
+  );
+}
+
 // Histórico mês a mês (seed do protótipo).
 export const historicoCrm = [
   { mes: 'Junho (parcial)', leads: 47, vendas: 9, conversao: '19%', ticket: 62400 },

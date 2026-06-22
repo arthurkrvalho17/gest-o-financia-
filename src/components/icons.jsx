@@ -58,6 +58,13 @@ export const IconFinanciamento = (p) => (
   </svg>
 );
 
+export const IconConexoes = (p) => (
+  <svg {...base} {...p}>
+    <path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 01-10 0z" />
+    <path d="M12 16v6" />
+  </svg>
+);
+
 export const IconSair = (p) => (
   <svg {...base} {...p}>
     <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
