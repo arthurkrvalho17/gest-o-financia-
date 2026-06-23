@@ -159,6 +159,15 @@ fora dela (só templates HSM).
 **Por quê:** permite plugar Instagram Direct e outros depois reusando o mesmo inbox, e respeita as
 regras da WhatsApp Business Platform desde o início.
 
+### ADR-11 — Assinatura eletrônica avançada via plataforma externa
+**Decisão:** o contrato é assinado pela loja, enviado ao cliente e devolvido como PDF lacrado +
+trilha de auditoria, guardados na ficha do carro. Não construímos criptografia — integra-se uma
+plataforma (ex.: ZapSign/ClickSign). A **ATPV-e** (transferência no Detran) é tratada como
+documento separado, **apenas guardado**.
+**Por quê:** a assinatura **avançada** (Lei 14.063/2020) é válida e vincula as partes para o
+contrato particular entre loja e cliente; é a auditoria que segura numa disputa. A transferência
+oficial é ato com ente público (gov.br/ICP-Brasil) — não dá para prometer transferência automática.
+
 ---
 
 ## 5. Modelo de dados
@@ -171,12 +180,14 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 - `lojas` — tenants. `usuarios` — `id = auth.users.id`, `loja_id`, `papel` (dono|funcionario).
 - `loja_do_usuario()` — função que resolve a loja do usuário logado. Trigger `handle_new_user()`.
 
-**Estoque** (`0001`, `0006`)
-- `veiculos` — `codigo, modelo, fab_mod, cor, placa, renavam, tipo (proprio|consignado),
-  entrada, saida, situacao (estoque|reservado|vendido|repasse), compra, pedido, minimo,
-  descricao, marcador_texto, marcador_cor`.
+**Estoque** (`0001`, `0006`, `0008`)
+- `veiculos` — `codigo, modelo, fab_mod, cor, placa, renavam, chassi, km, combustivel,
+  tipo (proprio|consignado), entrada, saida, situacao (estoque|reservado|vendido|repasse),
+  compra, pedido, minimo, descricao, marcador_texto, marcador_cor`.
 - `vendas` — `veiculo_id, valor_venda, data_venda, comprador_nome, forma_pagamento, vendedor_id,
-  observacao`.
+  observacao`. (Alimentam o desempenho de vendedores.)
+- `veiculo_documento` (`0008`) — ficha de documentos do carro (`tipo, arquivo_url,
+  status anexado|assinado|pendente, data`; arquivos no Storage).
 
 **Preparação** (`0002`)
 - `preparacao_gastos` — `veiculo_id, descricao, data, forma_pgto, valor, status (pago|pendente),
@@ -191,11 +202,17 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 - `leads` — `nome, telefone, origem (whatsapp|portal|indicacao|balcao), etapa
   (novo|conversa|simulacao|ficha|fechado), veiculo_id`.
 
-**Contratos** (`0005`)
+**Contratos** (`0005`, `0006`, `0008`)
 - `loja_config` — `assinatura_nome, assinatura_cnpj, logo_url`.
-- `documentos` — `tipo, veiculo_id, cliente_nome, cliente_cpf, dados (jsonb), pdf_url`.
+- `documentos` — `tipo, veiculo_id, cliente_nome, cliente_cpf, dados (jsonb), pdf_url` +
+  assinatura (`assinatura_status, url_pdf_assinado, url_auditoria, signatarios, nivel_assinatura`).
 - `veiculo_fotos` (`0006`) — fotos do carro (Storage + metadados).
 - `modelos_documento` (`0006`) — modelo do lojista por tipo (`arquivo_url, mapeamento_campos`).
+
+**Configurações / Plano** (`0008`)
+- `loja_plano` — `plano, valor_mensal, proxima_cobranca, forma_pagamento` + complementos
+  (`complemento_ia, complemento_multicanal, complemento_nf`). Integra com o provedor de
+  cobrança SaaS (ex.: Asaas). Vendedores = `usuarios` da loja.
 
 **Integrações** (`0007`)
 - Publicação: `canal` (catálogo), `canal_credencial` (por loja, tokens), `anuncio_publicacao`
@@ -213,6 +230,8 @@ Cada usuário tem `papel`. A regra (spec) e onde é aplicada:
 |---|---|---|---|
 | Aba **Financeiro** | vê | escondida | nav + rota ([`App.jsx`](src/App.jsx), [`Sidebar.jsx`](src/components/Sidebar.jsx)) |
 | Aba **Conexões** | vê | escondida | nav + rota |
+| Aba **Configurações** | vê | escondida | nav + rota |
+| Estoque — painel **Desempenho dos vendedores** | vê | escondido | [`EstoquePage.jsx`](src/modules/estoque/EstoquePage.jsx) |
 | Estoque — col. **Compra / Mínimo / Lucro** | vê | escondidas | [`EstoquePage.jsx`](src/modules/estoque/EstoquePage.jsx) |
 | Estoque — col. **Venda** | vê | vê | — |
 | Adicionar veículo — **compra / mínimo** | vê | escondidos | [`AddVeiculoModal.jsx`](src/modules/estoque/AddVeiculoModal.jsx) |
@@ -236,7 +255,10 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
 
 ### Estoque ([`src/modules/estoque`](src/modules/estoque))
 - Tabela densa **à venda / vendidos**: Cód, Modelo, Fab/Mod, Cor, Placa, Tipo, Entrada, Saída,
-  Situação, **Compra, Mínimo** (dono), Venda, **Lucro** (dono), Marcador, Ações.
+  **Tempo** (semáforo), Situação, **Compra, Mínimo** (dono), Venda, **Lucro** (dono), Marcador,
+  Ações, **Docs**.
+- **Tempo de estoque com semáforo**: verde ≤30 dias, amarelo-dourado 30–60, vermelho >60
+  (limiares em `format.js`) — para bater o olho no capital empatado.
 - **3 KPIs** (veículos em estoque, média de dias, vendas do mês) calculados por query.
 - **Filtros combináveis**: busca (modelo/placa/código), cor, tipo, situação, limpar,
   contador "Exibindo X de Y". Mantêm referência ao registro original.
@@ -247,6 +269,17 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   **vendedor** (equipe da loja), comprador, forma de pagamento, observação. Move o carro para
   vendidos (consignado → repasse). Lucro nunca guardado fixo.
 - **Publicar / status** por canal (ver seção 8).
+- **Ficha de documentos** por carro (à venda e vendido): anexar por tipo (ATPV-e, CRLV-e, CRV,
+  contrato, recibo, procuração, CNH do comprador, comprovante, outro) com status
+  anexado/assinado/pendente. A ATPV-e é só guardada — a transferência é no Detran.
+- **Desempenho dos vendedores** (só dono): destaque do mês, mês passado, total do mês;
+  minimizável; histórico de ranking mês a mês (dados das vendas por `vendedor_id`).
+
+### Configurações ([`src/modules/configuracoes`](src/modules/configuracoes)) — *só dono*
+- **Assinatura / Plano**: plano atual, valor, próxima cobrança, forma de pagamento, usuários
+  ativos; complementos ligáveis (IA de pré-venda, multicanal, NF). Integra com cobrança SaaS.
+- **Vendedores**: CRUD de vendedores = usuários da loja. Adicionar aqui faz o vendedor aparecer
+  no **Registrar venda**; remover, some. (No real, adicionar envia um convite de acesso.)
 
 ### Preparação ([`src/modules/preparacao`](src/modules/preparacao))
 Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em preparo / pronto).
@@ -280,6 +313,10 @@ no Estoque e a despesa do mês** — fonte única.
 - **Assinatura da loja** inclusa automaticamente. **Gerar PDF** (`jspdf`) registra o documento.
 - **Modelos da loja**: o lojista sobe o próprio modelo por tipo (placeholders); a UI indica qual
   modelo está em uso ("Seu modelo" × "Modelo padrão FINANCIA+").
+- **Assinatura eletrônica** (compra e venda): fluxo assinado pela loja → enviado ao cliente →
+  cliente assina pelo celular → PDF lacrado + trilha de auditoria guardados na **ficha do carro**
+  com status "Assinado". Assinatura **avançada** (Lei 14.063/2020) via plataforma externa (ex.:
+  ZapSign) — hoje simulada. A **ATPV-e** (Detran) é tratada à parte, sem promessa de transferência.
 
 ### Conexões ([`src/modules/conexoes`](src/modules/conexoes)) — *só dono*
 Conectar/desconectar os canais da loja (anúncio + mensageria), com as observações reais de cada um.
@@ -353,8 +390,10 @@ supabase/
 
 ## 11. Roadmap e pendências
 
-**Construído:** Fundação ✅ · Estoque ✅ · Preparação ✅ · Financeiro ✅ · CRM ✅ · Contratos ✅ ·
-Permissões/filtros/ajustes ✅ · Arquitetura de integrações (mock) ✅.
+**Construído:** Fundação ✅ · Estoque ✅ (filtros, semáforo de tempo, ficha de docs, desempenho de
+vendedores) · Preparação ✅ · Financeiro ✅ · CRM ✅ (funil + inbox) · Contratos ✅ (campos por tipo,
+modelos da loja, assinatura eletrônica) · Configurações ✅ (plano + vendedores) ·
+Permissões/papéis ✅ · Arquitetura de integrações (mock) ✅.
 
 **Pendente (precisa do Supabase conectado e/ou credenciais das lojas):**
 - Conectar o Supabase real (preencher `.env.local` + rodar `setup.sql`) e validar o isolamento.
@@ -383,6 +422,9 @@ Pontos que o dono do produto pode mudar; o sistema já roda com estes defaults:
 | Portais: agregador × conectores próprios | Camada **agnóstica**; ML como 1º real sugerido |
 | WhatsApp: Meta direto × BSP | Credencial agnóstica (serve aos dois) |
 | Instagram | Feed (post/carrossel); Marketplace orgânico **fora** |
+| Plataforma de assinatura | **ZapSign** (avançada); opção de elevar a qualificada |
+| Cobrança do plano | **Asaas** (demo) |
+| Funcionário vê **Desempenho dos vendedores** | Não (só dono) |
 
 ---
 
