@@ -46,3 +46,21 @@ export function diasDesde(iso) {
   if (Number.isNaN(d.getTime())) return 0;
   return Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
 }
+
+// Diferença em dias entre duas datas ISO
+export function diasEntre(isoA, isoB) {
+  if (!isoA || !isoB) return 0;
+  const a = new Date(isoA + 'T00:00:00').getTime();
+  const b = new Date(isoB + 'T00:00:00').getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round(Math.abs(b - a) / 86400000));
+}
+
+// Semáforo do tempo de estoque (limiares de configuração, fáceis de ajustar).
+// Verde: girando bem · Amarelo-dourado vivo: atenção · Vermelho: encalhado.
+export const TEMPO_ESTOQUE = { verdeAte: 30, amareloAte: 60 };
+export function corTempoEstoque(dias) {
+  if (dias <= TEMPO_ESTOQUE.verdeAte) return '#15803D'; // verde
+  if (dias <= TEMPO_ESTOQUE.amareloAte) return '#E0A500'; // amarelo-dourado vivo
+  return '#B91C1C'; // vermelho
+}

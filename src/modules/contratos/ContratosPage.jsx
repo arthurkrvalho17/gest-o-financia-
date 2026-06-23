@@ -9,6 +9,7 @@ import { gerarPdf } from './contratoPdf';
 
 export default function ContratosPage() {
   const ct = useContratos();
+  const toast = useToast();
   const [tipo, setTipo] = useState(null);
 
   if (tipo) return <Gerador ct={ct} tipo={tipo} onVoltar={() => setTipo(null)} />;
@@ -66,20 +67,25 @@ export default function ContratosPage() {
           </div>
         </Painel>
 
-        <Painel titulo="Documentos gerados" className="mt-[18px]">
+        <Painel titulo="Documentos gerados" hint="assinatura eletrônica avançada (Lei 14.063/2020)" className="mt-[18px]">
           {ct.documentos.length === 0 && <div className="px-[18px] py-8 text-center text-muted text-[13px]">Nenhum documento gerado ainda.</div>}
           {ct.documentos.map((d) => (
             <div key={d.id} className="flex items-center gap-3.5 px-[18px] py-3.5 border-b border-border last:border-b-0">
               <span className="w-[38px] h-[38px] rounded-[9px] bg-blue-soft text-blue grid place-items-center flex-shrink-0">
                 <IconContratos className="w-[18px] h-[18px]" />
               </span>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold text-[13.5px]">{MODELOS[d.tipo]?.nome || d.tipo}</div>
                 <div className="text-[11.5px] text-muted-2 mt-px">{d.titulo || d.cliente_nome} · {ddmm(d.criado_em)}</div>
               </div>
-              <span className="text-[11px] font-semibold px-2.5 py-[3px] rounded-md bg-bg text-muted">{MODELOS[d.tipo]?.nome?.split(' ')[0] || 'Doc'}</span>
+              {d.tipo === 'compra_venda' && <Assinatura doc={d} onAvancar={() => toast(ct.avancarAssinatura(d).msg)} />}
+              {d.tipo !== 'compra_venda' && <span className="text-[11px] font-semibold px-2.5 py-[3px] rounded-md bg-bg text-muted">{MODELOS[d.tipo]?.nome?.split(' ')[0] || 'Doc'}</span>}
             </div>
           ))}
+          <div className="px-[18px] py-2.5 text-[11.5px] text-muted bg-[#FAFBFD] flex gap-2 items-start leading-snug">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[14px] h-[14px] flex-shrink-0 text-blue mt-px"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+            A assinatura do contrato (loja + cliente) é a <b>avançada</b> e vincula as partes. A <b>ATPV-e</b> (transferência no Detran) é feita no gov.br — aqui só guardamos o arquivo na ficha do carro.
+          </div>
         </Painel>
       </div>
     </>
@@ -105,7 +111,9 @@ function Gerador({ ct, tipo, onVoltar }) {
 
   const veicSel = ct.veiculos.find((v) => v.id === veicId);
   const veiculoDoc = veicSel
-    ? { id: veicSel.id, modelo: veicSel.modelo, fab_mod: veicSel.fab_mod, placa: veicSel.placa, cor: veicSel.cor, valor: veicSel.pedido, compra: veicSel.compra }
+    ? { id: veicSel.id, codigo: veicSel.codigo, modelo: veicSel.modelo, fab_mod: veicSel.fab_mod, placa: veicSel.placa,
+        cor: veicSel.cor, renavam: veicSel.renavam, chassi: veicSel.chassi, km: veicSel.km,
+        combustivel: veicSel.combustivel, valor: veicSel.pedido, compra: veicSel.compra }
     : null;
 
   function gerar() {
@@ -164,6 +172,9 @@ function Gerador({ ct, tipo, onVoltar }) {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px] font-semibold">
                     <Prev k="Modelo" v={veiculoDoc.modelo} /><Prev k="Ano" v={veiculoDoc.fab_mod} />
                     <Prev k="Placa" v={veiculoDoc.placa} /><Prev k="Cor" v={veiculoDoc.cor} />
+                    <Prev k="RENAVAM" v={veiculoDoc.renavam} /><Prev k="Chassi" v={veiculoDoc.chassi} />
+                    <Prev k="KM" v={veiculoDoc.km != null ? Number(veiculoDoc.km).toLocaleString('pt-BR') : '—'} />
+                    <Prev k="Combustível" v={veiculoDoc.combustivel} />
                     <Prev k="Valor" v={fmt(veiculoDoc.valor)} />
                   </div>
                 </div>
@@ -216,6 +227,28 @@ function DemoBanner() {
       <span className="w-1.5 h-1.5 rounded-full bg-blue inline-block" />
       Modo demonstração. Configure o Supabase no <code>.env.local</code> para dados reais.
     </div>
+  );
+}
+function Assinatura({ doc, onAvancar }) {
+  const s = doc.assinatura_status || 'nao_enviado';
+  if (s === 'assinado') {
+    return <span className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md bg-green-soft text-green flex items-center gap-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><path d="M20 6L9 17l-5-5" /></svg>Assinado
+    </span>;
+  }
+  if (s === 'aguardando') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold px-2 py-1 rounded-md bg-amber-soft text-amber">Aguardando cliente</span>
+        <button onClick={onAvancar} className="text-[12px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-md px-3 py-1.5">Simular assinatura</button>
+      </div>
+    );
+  }
+  return (
+    <button onClick={onAvancar} className="text-[12px] font-semibold text-white bg-green hover:bg-[#126b34] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+      Enviar para assinatura
+    </button>
   );
 }
 function Painel({ titulo, hint, className = '', children }) {

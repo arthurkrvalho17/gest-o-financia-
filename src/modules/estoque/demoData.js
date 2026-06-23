@@ -12,6 +12,8 @@ function v(o) {
     saida: null,
     marcador_texto: null,
     marcador_cor: null,
+    combustivel: 'Flex',
+    km: 0,
     ...o,
   };
 }
@@ -60,12 +62,22 @@ export const demoCustos = {
   8150220: 2800, 8148990: 2800, 8147112: 1100,
 };
 
-// Equipe da loja (vira a lista de vendedores no Registrar venda).
-export const demoEquipe = [
+// Equipe da loja = usuários (vendedores). É a fonte do seletor no Registrar venda
+// e do cadastro em Configurações → Vendedores. Mutável no demo.
+let equipeStore = [
   { id: 'u-dono', nome: 'Rogério (dono)', papel: 'dono' },
   { id: 'u-lucas', nome: 'Lucas', papel: 'funcionario' },
   { id: 'u-pereira', nome: 'Pereira', papel: 'funcionario' },
 ];
+export function getEquipeDemo() {
+  return equipeStore;
+}
+export function addVendedorDemo({ nome, papel = 'funcionario' }) {
+  equipeStore = [...equipeStore, { id: uid(), nome, papel }];
+}
+export function removeVendedorDemo(id) {
+  equipeStore = equipeStore.filter((u) => u.id !== id);
+}
 
 export function demoVeiculos() {
   // cópia profunda para o estado poder mutar sem afetar o módulo

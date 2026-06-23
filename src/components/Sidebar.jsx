@@ -9,6 +9,7 @@ import {
   IconNotaFiscal,
   IconFinanciamento,
   IconConexoes,
+  IconConfig,
   IconSair,
 } from './icons';
 
@@ -23,6 +24,7 @@ const itensGestao = [
   { to: '/financeiro', label: 'Financeiro', Icon: IconFinanceiro, soDono: true },
   { to: '/contratos', label: 'Contratos', Icon: IconContratos },
   { to: '/conexoes', label: 'Conexões', Icon: IconConexoes, soDono: true },
+  { to: '/configuracoes', label: 'Configurações', Icon: IconConfig, soDono: true },
 ];
 
 function iniciais(nome) {

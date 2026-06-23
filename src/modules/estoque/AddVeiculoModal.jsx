@@ -3,8 +3,8 @@ import Modal from '../../components/Modal';
 import { parseBR } from '../../lib/format';
 
 const VAZIO = {
-  codigo: '', modelo: '', fab_mod: '', cor: '', placa: '', renavam: '', tipo: 'proprio',
-  compra: '', pedido: '', minimo: '', descricao: '',
+  codigo: '', modelo: '', fab_mod: '', cor: '', placa: '', renavam: '', chassi: '', km: '',
+  combustivel: '', tipo: 'proprio', compra: '', pedido: '', minimo: '', descricao: '',
 };
 
 export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }) {
@@ -41,6 +41,9 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       cor: f.cor.trim() || null,
       placa: f.placa.trim().toUpperCase() || null,
       renavam: f.renavam.trim() || null,
+      chassi: f.chassi.trim() || null,
+      km: parseInt(String(f.km).replace(/\D/g, ''), 10) || null,
+      combustivel: f.combustivel.trim() || null,
       tipo: f.tipo,
       compra: ehDono ? parseBR(f.compra) : 0,
       pedido: parseBR(f.pedido),
@@ -86,6 +89,9 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
         <F label="RENAVAM"><I v={f.renavam} on={(v) => set('renavam', v)} ph="00000000000" /></F>
         <F label="Fab/Modelo"><I v={f.fab_mod} on={(v) => set('fab_mod', v)} ph="2021/2022" /></F>
         <F label="Cor"><I v={f.cor} on={(v) => set('cor', v)} ph="Prata" /></F>
+        <F label="Chassi"><I v={f.chassi} on={(v) => set('chassi', v)} ph="9BW..." /></F>
+        <F label="Quilometragem"><I v={f.km} on={(v) => set('km', v)} ph="0" cls="num" /></F>
+        <F label="Combustível"><I v={f.combustivel} on={(v) => set('combustivel', v)} ph="Flex" /></F>
         <F label="Código"><I v={f.codigo} on={(v) => set('codigo', v)} ph="opcional" /></F>
         <F label="Tipo">
           <select value={f.tipo} onChange={(e) => set('tipo', e.target.value)}

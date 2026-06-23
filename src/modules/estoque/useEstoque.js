@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { hojeISO } from '../../lib/format';
-import { demoVeiculos, demoVendas, demoEquipe } from './demoData';
+import { demoVeiculos, demoVendas, getEquipeDemo } from './demoData';
+import { desempenhoDemo, computarDesempenho } from './demoDesempenho';
 import { totalPrepDemo } from '../preparacao/demoPrep';
 
 // Camada de dados do Estoque.
@@ -23,7 +24,7 @@ export function useEstoque() {
     if (demo) {
       setVeiculos(demoVeiculos());
       setVendas(demoVendas());
-      setEquipe(demoEquipe);
+      setEquipe(getEquipeDemo());
       setLoading(false);
       return;
     }
@@ -142,7 +143,9 @@ export function useEstoque() {
     return { error: e2 };
   }
 
-  return { veiculos, vendas, equipe, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda };
+  const desempenho = demo ? desempenhoDemo : computarDesempenho(vendas, equipe);
+
+  return { veiculos, vendas, equipe, desempenho, loading, demo, custosDe, addVeiculo, salvarMarcador, registrarVenda };
 }
 
 // Helpers de cálculo (lucro nunca é guardado fixo — sempre calculado).

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos } from '../estoque/demoData';
+import { addDoc as addDocFicha } from '../estoque/demoDocs';
 
 const docsDemoSeed = [
-  { id: 'd1', tipo: 'compra_venda', cliente_nome: 'Sandra Mello', titulo: 'Honda Civic Touring · Sandra Mello', criado_em: '2026-06-08' },
-  { id: 'd2', tipo: 'recibo_sinal', cliente_nome: 'Juliana Reis', titulo: 'VW Nivus · Juliana Reis', criado_em: '2026-06-06' },
-  { id: 'd3', tipo: 'compra_venda', cliente_nome: 'Eduardo Pinto', titulo: 'Chevrolet Tracker · Eduardo Pinto', criado_em: '2026-05-28' },
-  { id: 'd4', tipo: 'nota_entrada', cliente_nome: 'compra de particular', titulo: 'Fiat Pulse · compra de particular', criado_em: '2026-05-21' },
+  { id: 'd1', tipo: 'compra_venda', cliente_nome: 'Sandra Mello', titulo: 'Honda Civic Touring · Sandra Mello', criado_em: '2026-06-08', assinatura_status: 'assinado', veiculo_codigo: '8147112' },
+  { id: 'd2', tipo: 'recibo_sinal', cliente_nome: 'Juliana Reis', titulo: 'VW Nivus · Juliana Reis', criado_em: '2026-06-06', assinatura_status: null },
+  { id: 'd3', tipo: 'compra_venda', cliente_nome: 'Eduardo Pinto', titulo: 'Chevrolet Tracker · Eduardo Pinto', criado_em: '2026-05-28', assinatura_status: 'aguardando', veiculo_codigo: '8148990' },
+  { id: 'd4', tipo: 'nota_entrada', cliente_nome: 'compra de particular', titulo: 'Fiat Pulse · compra de particular', criado_em: '2026-05-21', assinatura_status: null },
 ];
 
 export function useContratos() {
@@ -64,7 +65,10 @@ export function useContratos() {
   async function registrarDocumento({ tipo, cliente, veiculo, extra, titulo }) {
     if (demo) {
       setDocumentos((arr) => [
-        { id: 'demo-' + Date.now(), tipo, cliente_nome: cliente.nome, titulo, criado_em: new Date().toISOString().slice(0, 10) },
+        { id: 'demo-' + Date.now(), tipo, cliente_nome: cliente.nome, titulo,
+          criado_em: new Date().toISOString().slice(0, 10),
+          assinatura_status: tipo === 'compra_venda' ? 'nao_enviado' : null,
+          veiculo_codigo: veiculo?.codigo || null },
         ...arr,
       ]);
       return { error: null };
@@ -110,5 +114,30 @@ export function useContratos() {
     return { error };
   }
 
-  return { demo, loading, config, veiculos, documentos, salvarConfig, registrarDocumento, modeloDe, uploadModelo, removerModelo };
+  // Fluxo de assinatura eletrônica (avançada, Lei 14.063/2020) via plataforma
+  // externa (ex.: ZapSign). Demo simula: nao_enviado → aguardando → assinado.
+  // Ao assinar, o PDF lacrado + auditoria são guardados na ficha do carro.
+  function avancarAssinatura(doc) {
+    let novoStatus, msg;
+    if (!doc.assinatura_status || doc.assinatura_status === 'nao_enviado') {
+      novoStatus = 'aguardando';
+      msg = 'Enviado ao cliente para assinar (link por WhatsApp/e-mail)';
+    } else if (doc.assinatura_status === 'aguardando') {
+      novoStatus = 'assinado';
+      msg = 'Assinado pelo cliente · PDF + auditoria guardados na ficha do carro';
+      // guarda na ficha do carro (PDF lacrado + relatório de auditoria)
+      if (doc.veiculo_codigo) {
+        addDocFicha(doc.veiculo_codigo, { tipo: 'compra_venda', nome_arquivo: 'contrato-assinado.pdf', status: 'assinado' });
+        addDocFicha(doc.veiculo_codigo, { tipo: 'outro', nome_arquivo: 'trilha-auditoria.pdf', status: 'anexado' });
+      }
+    } else {
+      return { msg: 'Documento já assinado' };
+    }
+    if (demo) {
+      setDocumentos((arr) => arr.map((d) => (d.id === doc.id ? { ...d, assinatura_status: novoStatus } : d)));
+    }
+    return { msg };
+  }
+
+  return { demo, loading, config, veiculos, documentos, salvarConfig, registrarDocumento, modeloDe, uploadModelo, removerModelo, avancarAssinatura };
 }

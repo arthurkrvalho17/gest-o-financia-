@@ -13,14 +13,11 @@ export const MODELOS = {
         T('profissao', 'Profissão'), T('rg', 'RG / órgão emissor'),
         T('endereco', 'Endereço completo', { full: true }),
       ] },
-      { titulo: 'Dados complementares do veículo', campos: [
-        T('renavam', 'RENAVAM'), T('chassi', 'Chassi'),
-        T('km', 'Quilometragem'), T('combustivel', 'Combustível'),
-      ] },
+      // Dados do veículo (RENAVAM, chassi, km, combustível) vêm do cadastro no estoque.
       { titulo: 'Negociação', campos: [
         T('valor_venda', 'Valor da venda', { dinheiro: true }),
         T('forma_pagamento', 'Forma de pagamento'),
-        T('prazo_entrega', 'Prazo de entrega'), T('garantia', 'Garantia'),
+        T('garantia', 'Garantia'),
         T('observacoes', 'Observações / estado do veículo', { textarea: true, full: true }),
       ] },
     ],
@@ -65,8 +62,8 @@ export const MODELOS = {
         T('outorgado_nome', 'Nome do outorgado', { full: true }),
         T('outorgado_cpf', 'CPF'), T('outorgado_rg', 'RG'),
       ] },
-      { titulo: 'Veículo e mandato', campos: [
-        T('renavam', 'RENAVAM'), T('chassi', 'Chassi'),
+      // Dados do veículo (RENAVAM, chassi) vêm do cadastro no estoque.
+      { titulo: 'Mandato', campos: [
         T('poderes', 'Poderes', { textarea: true, full: true, valorPadrao: 'Poderes para representar o outorgante junto ao Detran, assinar ATPV-e/CRV e praticar atos para a transferência do veículo.' }),
         T('validade', 'Validade / prazo'), T('cidade', 'Cidade'),
       ] },
