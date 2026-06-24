@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos } from '../estoque/demoData';
-import { gastosDemo, setGastosDemo, novoGastoDemo } from './demoPrep';
+import { gastosDemo, setGastosDemo, novoGastoDemo, addGastoPreparacao } from './demoPrep';
 
 // Camada de dados da Preparação.
 // Demo: usa o store compartilhado demoPrep (mesma fonte do custo no Estoque).
@@ -69,6 +69,26 @@ export function usePreparacao() {
     return { error };
   }
 
+  // Gasto preenchido pelo formulário (fonte única Preparação ↔ Financeiro).
+  async function addGastoForm(veic, dados) {
+    if (demo) {
+      addGastoPreparacao(veic.codigo, dados);
+      setTick((t) => t + 1);
+      return { error: null };
+    }
+    const { error } = await supabase.from('preparacao_gastos').insert({
+      loja_id: lojaId,
+      veiculo_id: veic.id,
+      descricao: dados.descricao,
+      valor: dados.valor,
+      status: dados.status,
+      observacoes: dados.observacao,
+      data: new Date().toISOString().slice(0, 10),
+    });
+    if (!error) await carregar();
+    return { error };
+  }
+
   // patch parcial { descricao?, data?, forma_pgto?, valor?, status?, observacoes? }
   async function updateGasto(veic, gasto, patch) {
     if (demo) {
@@ -102,5 +122,5 @@ export function usePreparacao() {
     return { error };
   }
 
-  return { veiculos, loading, demo, gastosDe, totalDe, addGasto, updateGasto, delGasto, tick };
+  return { veiculos, loading, demo, gastosDe, totalDe, addGasto, addGastoForm, updateGasto, delGasto, tick };
 }

@@ -5,6 +5,8 @@ import { fmt, brl, fmtSinal, fmtR } from '../../lib/format';
 import { useFinanceiro } from './useFinanceiro';
 import { mesesPassados, NOMES_MES } from './demoFin';
 import DespesaSheet from './DespesaSheet';
+import GastoPreparacaoForm from '../preparacao/GastoPreparacaoForm';
+import { useToast } from '../../components/Toast';
 
 const hoje = new Date();
 const MES_ATUAL = hoje.toISOString().slice(0, 7); // YYYY-MM
@@ -28,8 +30,12 @@ export default function FinanceiroPage() {
     };
   }, [fin]);
 
+  // Preparação abre a visão de preparação do mês (form com carro); fixas/outras abrem a planilha simples.
   const abrirCategoria = (mes, mesNome, categoria, from) =>
-    setView({ tipo: 'sheet', mes, mesNome, categoria, from });
+    setView({ tipo: categoria === 'prep' ? 'prep' : 'sheet', mes, mesNome, categoria, from });
+
+  const voltarDe = (from, mes, mesNome) =>
+    from === 'month' ? { tipo: 'month', mes, mesNome } : { tipo: 'overview' };
 
   if (view.tipo === 'sheet') {
     return (
@@ -38,7 +44,18 @@ export default function FinanceiroPage() {
         mes={view.mes}
         mesNome={view.mesNome}
         categoria={view.categoria}
-        onVoltar={() => setView(view.from === 'month' ? { tipo: 'month', mes: view.mes, mesNome: view.mesNome } : { tipo: 'overview' })}
+        onVoltar={() => setView(voltarDe(view.from, view.mes, view.mesNome))}
+      />
+    );
+  }
+
+  if (view.tipo === 'prep') {
+    return (
+      <PreparacaoMesView
+        fin={fin}
+        mes={view.mes}
+        mesNome={view.mesNome}
+        onVoltar={() => setView(voltarDe(view.from, view.mes, view.mesNome))}
       />
     );
   }
@@ -120,7 +137,7 @@ function ResumoMes({ titulo, sub, fin, dados, demo, isOverview, onAbrirCategoria
             <PanelHead titulo="Despesas do mês" hint="quanto a loja gastou" />
             <div className="py-1.5">
               <DespRow cor="#185FA5" label="Despesas fixas" valor={fixas} onClick={() => onAbrirCategoria('fixa')} sub={`Clique para abrir e editar · ${fin.despesasDe(dados.mes, 'fixa').length} lançamentos`} />
-              <DespRow cor="#15803D" label="Preparação dos carros" valor={prep} sub="Vem dos carros (aba Preparação) · só consolidado aqui" />
+              <DespRow cor="#15803D" label="Preparação dos carros" valor={prep} onClick={() => onAbrirCategoria('prep')} sub="Clique para ver e adicionar gastos dos carros do mês" />
               <DespRow cor="#B45309" label="Outras despesas" valor={outras} onClick={() => onAbrirCategoria('outra')} sub="Clique para abrir e editar a planilha" />
             </div>
             <Foot label="Total gasto no mês" valor={brl(gastoTotal)} />
@@ -204,6 +221,76 @@ function Linha({ rotulo, valor }) {
       <span className="text-muted">{rotulo}</span>
       <b className="num">{valor}</b>
     </div>
+  );
+}
+
+// Visão "Preparação dos carros" do mês — lista os gastos (com o carro) e usa o
+// MESMO formulário da aba Preparação. Fonte única: o registro aparece nos dois lugares.
+function PreparacaoMesView({ fin, mes, mesNome, onVoltar }) {
+  const toast = useToast();
+  const [formOpen, setFormOpen] = useState(false);
+  const itens = fin.gastosPrepDoMes(mes);
+  const total = itens.reduce((s, g) => s + (Number(g.valor) || 0), 0);
+
+  async function salvar(veic, dados) {
+    const { error } = await fin.addGastoPrepForm(veic, dados);
+    setFormOpen(false);
+    toast(error ? 'Erro: ' + error.message : `Gasto de ${veic.modelo} lançado`);
+  }
+
+  return (
+    <>
+      <Topbar titulo="Financeiro" sub={`Preparação dos carros · ${mesNome}`} />
+      <div className="px-7 py-6 max-w-[1240px]">
+        <div className="flex items-center gap-3.5 mb-[18px]">
+          <button onClick={onVoltar} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            Voltar
+          </button>
+          <div>
+            <h2 className="text-[17px] font-bold">Preparação dos carros</h2>
+            <div className="text-[12px] text-muted">Mês de referência: {mesNome}</div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[13px]">
+              <thead><tr className="bg-[#F4F7FB]"><Th>Carro</Th><Th>Descrição</Th><Th r>Valor</Th><Th center>Status</Th></tr></thead>
+              <tbody>
+                {itens.length === 0 && <tr><td colSpan={4} className="px-[14px] py-8 text-center text-muted">Nenhum gasto de preparação neste mês. Use "Adicionar despesa".</td></tr>}
+                {itens.map((g) => (
+                  <tr key={g.id} className="odd:bg-[#FAFBFD] border-b border-border last:border-b-0">
+                    <Td><span className="font-semibold">{g.carro}</span>{g.placa && <span className="text-muted-2"> · {g.placa}</span>}</Td>
+                    <Td>{g.descricao || '—'}</Td>
+                    <Td r className="num font-medium">{brl(g.valor)}</Td>
+                    <Td center>
+                      <span className={['text-[10.5px] font-bold px-2 py-1 rounded-md', g.status === 'pago' ? 'bg-green-soft text-green' : 'bg-amber-soft text-amber'].join(' ')}>
+                        {g.status === 'pago' ? 'PAGO' : 'PENDENTE'}
+                      </span>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between px-[18px] py-3.5 bg-[#F4F7FB] flex-wrap gap-3">
+            <button onClick={() => setFormOpen(true)} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
+              Adicionar despesa
+            </button>
+            <div className="text-[13px] text-muted font-semibold flex items-center gap-2.5">Total <b className="text-[19px] text-navy font-extrabold num">{brl(total)}</b></div>
+          </div>
+        </div>
+
+        <div className="flex gap-2.5 text-[11.5px] text-muted px-[18px] py-3 mt-3 leading-relaxed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[15px] h-[15px] flex-shrink-0 text-blue mt-px"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+          Cada gasto é um registro único: aparece aqui e na aba Preparação do carro. Já está embutido no lucro de cada carro — não é descontado de novo no resultado.
+        </div>
+      </div>
+
+      <GastoPreparacaoForm open={formOpen} veiculos={fin.veiculos} onClose={() => setFormOpen(false)} onSave={salvar} />
+    </>
   );
 }
 

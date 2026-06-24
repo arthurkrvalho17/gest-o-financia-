@@ -1,18 +1,41 @@
 import { useState } from 'react';
 import { Topbar } from '../../components/Layout';
+import { useToast } from '../../components/Toast';
 import { brl, fmt } from '../../lib/format';
 import { usePreparacao } from './usePreparacao';
 import { FORMAS_PGTO } from './demoPrep';
+import GastoPreparacaoForm from './GastoPreparacaoForm';
 
 const ahVendaSit = ['estoque', 'reservado'];
 const vendidoSit = ['vendido', 'repasse'];
 
 export default function PreparacaoPage() {
   const prep = usePreparacao();
+  const toast = useToast();
   const [mode, setMode] = useState('venda');
   const [alvo, setAlvo] = useState(null); // veículo aberto
+  const [form, setForm] = useState({ open: false, preId: null });
 
-  if (alvo) return <DetalheCarro prep={prep} veic={alvo} onVoltar={() => setAlvo(null)} />;
+  const abrirForm = (preId = null) => setForm({ open: true, preId });
+  const fecharForm = () => setForm({ open: false, preId: null });
+  async function salvarGasto(veic, dados) {
+    const { error } = await prep.addGastoForm(veic, dados);
+    fecharForm();
+    toast(error ? 'Erro: ' + error.message : `Gasto adicionado em ${veic.modelo}`);
+  }
+
+  const formEl = (
+    <GastoPreparacaoForm open={form.open} veiculos={prep.veiculos} preVeiculoId={form.preId} onClose={fecharForm} onSave={salvarGasto} />
+  );
+
+  if (alvo) {
+    return (
+      <>
+        <DetalheCarro prep={prep} veic={alvo} onVoltar={() => setAlvo(null)} onAddGasto={() => abrirForm(alvo.id)} />
+        {formEl}
+      </>
+    );
+  }
 
   const lista = prep.veiculos.filter((v) =>
     (mode === 'venda' ? ahVendaSit : vendidoSit).includes(v.situacao)
@@ -20,7 +43,16 @@ export default function PreparacaoPage() {
 
   return (
     <>
-      <Topbar titulo="Preparação" sub="Gastos de preparação de cada carro" />
+      <Topbar
+        titulo="Preparação"
+        sub="Gastos de preparação de cada carro"
+        acao={
+          <button onClick={() => abrirForm()} className="inline-flex items-center gap-2 bg-blue hover:bg-blue-hover text-white font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px]">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
+            Adicionar gasto
+          </button>
+        }
+      />
       <div className="px-7 py-6 max-w-[1240px]">
         {prep.demo && <DemoBanner />}
 
@@ -78,11 +110,12 @@ export default function PreparacaoPage() {
           </div>
         </div>
       </div>
+      {formEl}
     </>
   );
 }
 
-function DetalheCarro({ prep, veic, onVoltar }) {
+function DetalheCarro({ prep, veic, onVoltar, onAddGasto }) {
   const itens = prep.gastosDe(veic);
   const total = prep.totalDe(veic);
 
@@ -155,7 +188,7 @@ function DetalheCarro({ prep, veic, onVoltar }) {
             </table>
           </div>
           <div className="flex items-center justify-between px-[18px] py-3.5 bg-bg flex-wrap gap-3">
-            <button onClick={() => prep.addGasto(veic)} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
+            <button onClick={onAddGasto} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
               Adicionar gasto
             </button>

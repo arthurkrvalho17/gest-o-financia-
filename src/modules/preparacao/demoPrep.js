@@ -61,6 +61,14 @@ export function novoGastoDemo() {
   return g('', '', '', 0, 'pendente');
 }
 
+// Adiciona um gasto preenchido (vindo do formulário) ao carro. É o ponto de
+// fonte única: o mesmo registro aparece na Preparação e no Financeiro.
+export function addGastoPreparacao(codigo, { descricao, valor, status = 'pendente', observacao = '', data }) {
+  gastosDemo(codigo).push(
+    g(descricao || '', data || new Date().toISOString().slice(0, 10), '', Number(valor) || 0, status, observacao || '')
+  );
+}
+
 // Todos os gastos de preparação (achatados, com o código do carro) — usado
 // pelo Financeiro para consolidar a preparação do mês pela data de cada gasto.
 export function allGastosDemo() {

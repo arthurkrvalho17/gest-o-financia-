@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos, demoVendas } from '../estoque/demoData';
-import { totalPrepDemo, allGastosDemo, gastosDemo } from '../preparacao/demoPrep';
+import { totalPrepDemo, allGastosDemo, gastosDemo, addGastoPreparacao } from '../preparacao/demoPrep';
 import { despesasDemo, setDespesasDemo, novaDespesaDemo } from './demoFin';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
@@ -31,7 +31,7 @@ export function useFinanceiro() {
     const [{ data: vs }, { data: vd }, { data: gs }, { data: ds }] = await Promise.all([
       supabase.from('veiculos').select('*'),
       supabase.from('vendas').select('*'),
-      supabase.from('preparacao_gastos').select('veiculo_id, valor, data, descricao'),
+      supabase.from('preparacao_gastos').select('id, veiculo_id, valor, data, descricao, status'),
       supabase.from('despesas').select('*'),
     ]);
     setVeiculos(vs || []);
@@ -96,6 +96,38 @@ export function useFinanceiro() {
     [demo, prepGastos, tick] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // Gastos de preparação do mês, com o carro resolvido (visão do Financeiro).
+  const gastosPrepDoMes = useCallback(
+    (mes) => {
+      const lista = demo ? allGastosDemo() : prepGastos;
+      return lista
+        .filter((g) => mesDe(g.data) === mes)
+        .map((g) => {
+          const veic = demo
+            ? veiculos.find((v) => String(v.codigo) === String(g.codigo))
+            : veiculos.find((v) => v.id === g.veiculo_id);
+          return { ...g, carro: veic?.modelo || '—', placa: veic?.placa || '' };
+        });
+    },
+    [demo, prepGastos, veiculos, tick] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // Adicionar gasto de preparação pelo formulário (mesmo registro da aba Preparação).
+  async function addGastoPrepForm(veic, dados) {
+    if (demo) {
+      addGastoPreparacao(veic.codigo, dados);
+      setTick((t) => t + 1);
+      return { error: null };
+    }
+    const { error } = await supabase.from('preparacao_gastos').insert({
+      loja_id: lojaId, veiculo_id: veic.id, descricao: dados.descricao,
+      valor: dados.valor, status: dados.status, observacoes: dados.observacao,
+      data: new Date().toISOString().slice(0, 10),
+    });
+    if (!error) await carregar();
+    return { error };
+  }
+
   // ---- despesas (fixa/outra) ----
   const despesasDe = useCallback(
     (mes, categoria) => {
@@ -146,6 +178,7 @@ export function useFinanceiro() {
   return {
     demo, loading,
     custosDe, vendasDoMes, faturamentoDoMes, lucroPorCarroDoMes, preparacaoDoMes, gastosPrepDe,
+    gastosPrepDoMes, addGastoPrepForm, veiculos,
     despesasDe, totalDespesas, addDespesa, updateDespesa, delDespesa,
   };
 }
