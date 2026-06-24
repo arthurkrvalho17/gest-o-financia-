@@ -283,14 +283,18 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
 
 ### Preparação ([`src/modules/preparacao`](src/modules/preparacao))
 Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em preparo / pronto).
-Ao abrir um carro, planilha editável de gastos (descrição, data, forma de pgto, valor,
-status pago/pendente, observações) com total automático. **Esse total alimenta o lucro do carro
-no Estoque e a despesa do mês** — fonte única.
+Ao abrir um carro, planilha editável de gastos com total automático. **Adicionar gasto abre um
+formulário** ([`GastoPreparacaoForm`](src/modules/preparacao/GastoPreparacaoForm.jsx)) — carro do
+estoque, descrição, valor, status pago/pendente, observação (data automática) — com dois pontos de
+entrada: botão no topo (sem carro) e dentro da planilha do carro (carro pré-selecionado). **Esse
+total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte única (`gasto_preparacao`).
 
 ### Financeiro ([`src/modules/financeiro`](src/modules/financeiro)) — *só dono*
 - **3 KPIs** na ordem fixa: Faturamento → **Lucro** → Gasto total.
-- **Despesas do mês** em 3 categorias: **fixas** e **outras** editáveis (planilha com lembrete,
-  status, total); **preparação** apenas consolidada (vem de `preparacao_gastos`).
+- **Despesas do mês** em 3 categorias: **fixas** e **outras** editáveis (planilha simples com
+  lembrete, status, total); **preparação dos carros** clicável → visão do mês (lista com o carro)
+  e "Adicionar despesa" abrindo o **mesmo formulário** da Preparação (fonte única). O mesmo gasto
+  aparece nas duas telas e não é descontado duas vezes no resultado.
 - **Lucro por carro vendido** — clicável, abre o detalhe da conta (comprei por X, preparação item
   a item, vendi por Y, fórmula) + resultado da loja no mês.
 - **Histórico mês a mês** clicável; cada mês abre com as mesmas planilhas **editáveis** (correção
