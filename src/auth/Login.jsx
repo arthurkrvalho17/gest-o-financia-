@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabaseConfigurado } from '../lib/supabase';
+import Logo from '../components/Logo';
 
 export default function Login() {
   const { entrar, cadastrar } = useAuth();
@@ -58,13 +59,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg px-4">
       <div className="w-full max-w-[400px]">
-        <div className="flex items-center gap-2.5 justify-center mb-6">
-          <div className="w-9 h-9 rounded-lg bg-blue grid place-items-center text-white font-extrabold text-lg">
-            F
-          </div>
-          <div className="font-bold text-xl tracking-tight text-navy">
-            Financia<span className="text-blue">+</span>
-          </div>
+        <div className="flex justify-center mb-6">
+          <Logo tone="dark" size={26} />
         </div>
 
         <div className="bg-white border border-border rounded-card shadow-card p-7">

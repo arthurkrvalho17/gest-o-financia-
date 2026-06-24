@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import Logo from './Logo';
 import {
   IconEstoque,
   IconPreparacao,
@@ -53,13 +54,8 @@ export default function Sidebar() {
   return (
     <aside className="w-[236px] flex-shrink-0 bg-navy flex flex-col sticky top-0 h-screen border-r border-white/[0.07]">
       {/* Marca */}
-      <div className="px-[22px] pt-[22px] pb-[18px] flex items-center gap-2.5 border-b border-white/[0.08]">
-        <div className="w-[30px] h-[30px] rounded-lg bg-blue grid place-items-center text-white font-extrabold text-base">
-          F
-        </div>
-        <div className="font-bold text-base tracking-tight text-white">
-          Financia<span className="text-[#5EA0E0]">+</span>
-        </div>
+      <div className="px-[22px] pt-[22px] pb-[18px] border-b border-white/[0.08]">
+        <Logo tone="light" size={19} />
       </div>
 
       {/* Navegação */}
