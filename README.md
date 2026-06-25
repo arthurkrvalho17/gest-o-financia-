@@ -229,13 +229,12 @@ Cada usuário tem `papel`. A regra (spec) e onde é aplicada:
 | Recurso | Dono | Funcionário | Onde |
 |---|---|---|---|
 | Aba **Financeiro** | vê | escondida | nav + rota ([`App.jsx`](src/App.jsx), [`Sidebar.jsx`](src/components/Sidebar.jsx)) |
-| Aba **Conexões** | vê | escondida | nav + rota |
-| Aba **Configurações** | vê | escondida | nav + rota |
+| Aba **Configurações** (inclui Conexões) | vê | escondida | nav + rota |
 | Estoque — painel **Desempenho dos vendedores** | vê | escondido | [`EstoquePage.jsx`](src/modules/estoque/EstoquePage.jsx) |
-| Estoque — col. **Compra / Mínimo / Lucro** | vê | escondidas | [`EstoquePage.jsx`](src/modules/estoque/EstoquePage.jsx) |
-| Estoque — col. **Venda** | vê | vê | — |
-| Adicionar veículo — **compra / mínimo** | vê | escondidos | [`AddVeiculoModal.jsx`](src/modules/estoque/AddVeiculoModal.jsx) |
-| Registrar venda — **lucro / compra / mínimo** | vê | escondidos | [`RegistrarVendaModal.jsx`](src/modules/estoque/RegistrarVendaModal.jsx) |
+| Valores **Compra** e **Lucro** (tabela, ficha, PDF) | vê | escondidos | regra 6.5 |
+| Valores **Mínimo** e **Venda** | vê | **vê** | regra 6.5 |
+| Adicionar veículo — **compra** | vê | escondido | [`AddVeiculoModal.jsx`](src/modules/estoque/AddVeiculoModal.jsx) |
+| Registrar venda — **lucro / compra / preparação** | vê | escondidos (vê mínimo+aviso) | [`RegistrarVendaModal.jsx`](src/modules/estoque/RegistrarVendaModal.jsx) |
 | Estoque, Preparação, CRM, Contratos | vê | vê | — |
 
 - O papel vem de `usuarios.papel`. No modo demo há um seletor **"Ver como: Dono | Funcionário"**
@@ -254,11 +253,16 @@ Login e cadastro (email/senha). No cadastro, cria a loja e vincula o usuário (t
 base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supabase → demo).
 
 ### Estoque ([`src/modules/estoque`](src/modules/estoque))
-- Tabela densa **à venda / vendidos**: Cód, Modelo, Fab/Mod, Cor, Placa, Tipo, Entrada, Saída,
-  **Tempo** (semáforo), Situação, **Compra, Mínimo** (dono), Venda, **Lucro** (dono), Marcador,
-  Ações, **Docs**.
+- Tabela densa **à venda / vendidos**: Cód, Modelo (clicável → ficha), Fab/Mod, Cor, Placa, Tipo,
+  Entrada, **Tempo** (semáforo), Situação, **Compra** (dono), **Mínimo**, **Venda**, **Lucro**
+  (dono), Marcador, Ações, **Docs**. Sem coluna de Saída (a data da venda fica só no dado).
+- **Situação** (estoque ativo): estoque / reservado / preparação. Vendido/repasse são consequência
+  da venda registrada.
 - **Tempo de estoque com semáforo**: verde ≤30 dias, amarelo-dourado 30–60, vermelho >60
   (limiares em `format.js`) — para bater o olho no capital empatado.
+- **Ficha do carro** (clique no nome → modal): galeria, todos os dados, valores (regra 6.5) e
+  documentos; **PDF da ficha** (toggle "com capa"). E **PDF do estoque**: catálogo por faixa de
+  preço (capa/km/preço, toggle).
 - **3 KPIs** (veículos em estoque, média de dias, vendas do mês) calculados por query.
 - **Filtros combináveis**: busca (modelo/placa/código), cor, tipo, situação, limpar,
   contador "Exibindo X de Y". Mantêm referência ao registro original.
@@ -280,6 +284,8 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   ativos; complementos ligáveis (IA de pré-venda, multicanal, NF). Integra com cobrança SaaS.
 - **Vendedores**: CRUD de vendedores = usuários da loja. Adicionar aqui faz o vendedor aparecer
   no **Registrar venda**; remover, some. (No real, adicionar envia um convite de acesso.)
+- **Conexões**: conectar/desconectar os canais da loja (anúncio + WhatsApp) — antes era página
+  separada, agora vive aqui. As credenciais são da loja; o FINANCIA+ só orquestra.
 
 ### Preparação ([`src/modules/preparacao`](src/modules/preparacao))
 Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em preparo / pronto).
@@ -321,10 +327,6 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
   cliente assina pelo celular → PDF lacrado + trilha de auditoria guardados na **ficha do carro**
   com status "Assinado". Assinatura **avançada** (Lei 14.063/2020) via plataforma externa (ex.:
   ZapSign) — hoje simulada. A **ATPV-e** (Detran) é tratada à parte, sem promessa de transferência.
-
-### Conexões ([`src/modules/conexoes`](src/modules/conexoes)) — *só dono*
-Conectar/desconectar os canais da loja (anúncio + mensageria), com as observações reais de cada um.
-Base do onboarding (OAuth/Embedded Signup entra por fase).
 
 ---
 
@@ -417,7 +419,7 @@ Pontos que o dono do produto pode mudar; o sistema já roda com estes defaults:
 
 | Tema | Default adotado |
 |---|---|
-| Funcionário vê o **mínimo**? | Não |
+| Funcionário vê o **mínimo**? | **Sim** (regra 6.5 — vê Mínimo e Venda; não vê Compra/Lucro) |
 | Funcionário vê a **Preparação**? | Sim |
 | Consulta por **placa** / OCR do **CRLV** | Manual no MVP ("em breve") |
 | Modelo `.docx` do lojista | Por **placeholders** `{{campo}}` |
