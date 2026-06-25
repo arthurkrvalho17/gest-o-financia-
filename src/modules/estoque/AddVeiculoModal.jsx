@@ -9,9 +9,20 @@ const VAZIO = {
 
 export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }) {
   const [f, setF] = useState(VAZIO);
-  const [fotos, setFotos] = useState([]); // {url, nome}
+  const [fotos, setFotos] = useState([]); // {url, nome} — a primeira é a capa
+  const [dragIdx, setDragIdx] = useState(null);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+
+  function moverFoto(from, to) {
+    if (from === to || from == null || to == null) return;
+    setFotos((arr) => {
+      const novo = [...arr];
+      const [item] = novo.splice(from, 1);
+      novo.splice(to, 0, item);
+      return novo;
+    });
+  }
 
   useEffect(() => {
     if (open) {
@@ -47,7 +58,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       tipo: f.tipo,
       compra: ehDono ? parseBR(f.compra) : 0,
       pedido: parseBR(f.pedido),
-      minimo: ehDono ? parseBR(f.minimo) : 0,
+      minimo: parseBR(f.minimo),
       descricao: f.descricao.trim() || null,
       fotos: fotos.map((x, i) => ({ url: x.url, nome: x.nome, ordem: i })),
     });
@@ -102,20 +113,26 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
         </F>
         {ehDono && <F label={f.tipo === 'consignado' ? 'Repasse ao dono' : 'Valor de compra'}><I v={f.compra} on={(v) => set('compra', v)} ph="R$ 0,00" cls="num" /></F>}
         <F label="Valor pedido (anúncio)"><I v={f.pedido} on={(v) => set('pedido', v)} ph="R$ 0,00" cls="num" /></F>
-        {ehDono && <F label="Valor mínimo de venda"><I v={f.minimo} on={(v) => set('minimo', v)} ph="R$ 0,00" cls="num" /></F>}
+        <F label="Valor mínimo de venda"><I v={f.minimo} on={(v) => set('minimo', v)} ph="R$ 0,00" cls="num" /></F>
         <F label="Descrição do anúncio" full>
           <textarea value={f.descricao} onChange={(e) => set('descricao', e.target.value)} rows={2} placeholder="Único dono, revisões em dia, pneus novos…"
             className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full resize-y" />
         </F>
       </div>
 
-      {/* Fotos */}
+      {/* Fotos — arraste para reordenar; a primeira é a capa */}
       <div className="mt-3.5">
-        <label className="text-[11.5px] font-semibold text-muted">Fotos do carro</label>
+        <label className="text-[11.5px] font-semibold text-muted">Fotos do carro <span className="font-normal text-muted-2">· arraste para reordenar (a 1ª é a capa)</span></label>
         <div className="mt-1.5 flex flex-wrap gap-2 items-center">
           {fotos.map((foto, i) => (
-            <div key={i} className="w-16 h-16 rounded-lg overflow-hidden border border-border relative group">
-              <img src={foto.url} alt={foto.nome} className="w-full h-full object-cover" />
+            <div key={i} draggable
+              onDragStart={() => setDragIdx(i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => { moverFoto(dragIdx, i); setDragIdx(null); }}
+              onDragEnd={() => setDragIdx(null)}
+              className={['w-16 h-16 rounded-lg overflow-hidden border relative cursor-grab active:cursor-grabbing', i === 0 ? 'border-blue ring-2 ring-blue/30' : 'border-border'].join(' ')}>
+              <img src={foto.url} alt={foto.nome} className="w-full h-full object-cover pointer-events-none" />
+              {i === 0 && <span className="absolute bottom-0 inset-x-0 bg-blue text-white text-[9px] font-bold text-center py-px">CAPA</span>}
               <button onClick={() => setFotos((arr) => arr.filter((_, j) => j !== i))}
                 className="absolute top-0.5 right-0.5 bg-navy/70 text-white w-4 h-4 rounded grid place-items-center text-[11px] leading-none">×</button>
             </div>

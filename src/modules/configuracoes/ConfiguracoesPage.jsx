@@ -3,6 +3,15 @@ import { Topbar } from '../../components/Layout';
 import { useToast } from '../../components/Toast';
 import { brl } from '../../lib/format';
 import { getEquipeDemo, addVendedorDemo, removeVendedorDemo } from '../estoque/demoData';
+import { CANAIS_ANUNCIO, CANAIS_MENSAGERIA } from '../../integracoes/canais';
+import { statusConexao, setStatusConexao } from '../../integracoes/demoIntegr';
+
+const STATUS_CX = {
+  conectado: { label: 'Conectado', cls: 'bg-green-soft text-green', dot: '#15803D' },
+  desconectado: { label: 'Desconectado', cls: 'bg-[#EEF2F7] text-muted', dot: '#94A3B8' },
+  homologacao: { label: 'Em homologação', cls: 'bg-amber-soft text-amber', dot: '#B45309' },
+  erro: { label: 'Erro', cls: 'bg-red-soft text-red', dot: '#B91C1C' },
+};
 
 // Plano demo (no real vem de loja_plano + provedor de cobrança, ex.: Asaas)
 const PLANO_DEMO = {
@@ -32,11 +41,22 @@ export default function ConfiguracoesPage() {
   function toggleComplemento(k) {
     setComplementos((c) => ({ ...c, [k]: !c[k] }));
   }
+  function conectar(canal, nome) {
+    setStatusConexao(canal, 'conectado');
+    force((n) => n + 1);
+    toast(`${nome} conectado (demo)`);
+  }
+  function desconectar(canal, nome) {
+    setStatusConexao(canal, 'desconectado');
+    force((n) => n + 1);
+    toast(`${nome} desconectado`);
+  }
 
   return (
     <>
-      <Topbar titulo="Configurações" sub="Assinatura, plano e vendedores da loja" />
-      <div className="px-7 py-6 max-w-[1240px] grid grid-cols-2 gap-[18px] max-[1000px]:grid-cols-1">
+      <Topbar titulo="Configurações" sub="Assinatura, vendedores e conexões da loja" />
+      <div className="px-7 py-6 max-w-[1240px]">
+       <div className="grid grid-cols-2 gap-[18px] max-[1000px]:grid-cols-1">
         {/* 3.1 Assinatura / Plano */}
         <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
           <div className="px-[18px] py-[15px] border-b border-border"><h2 className="text-[14.5px] font-semibold">Assinatura / Plano</h2></div>
@@ -99,8 +119,43 @@ export default function ConfiguracoesPage() {
             Vendedores são usuários da loja (mesma base do login). No sistema real, adicionar envia um convite de acesso.
           </div>
         </div>
+       </div>
+
+       {/* Conexões */}
+       <div className="bg-white border border-border rounded-card shadow-card overflow-hidden mt-[18px]">
+         <div className="flex items-center justify-between px-[18px] py-[15px] border-b border-border">
+           <h2 className="text-[14.5px] font-semibold">Conexões</h2>
+           <span className="text-[12px] text-muted-2">as contas são da sua loja — o FINANCIA+ só orquestra</span>
+         </div>
+         <div className="px-[18px] py-2 text-[11.5px] text-muted-2 border-b border-border">Canais de anúncio</div>
+         {CANAIS_ANUNCIO.map((c) => <LinhaConexao key={c.chave} canal={c} onConectar={conectar} onDesconectar={desconectar} />)}
+         <div className="px-[18px] py-2 text-[11.5px] text-muted-2 border-b border-border border-t">Mensageria</div>
+         {CANAIS_MENSAGERIA.map((c) => <LinhaConexao key={c.chave} canal={c} onConectar={conectar} onDesconectar={desconectar} />)}
+       </div>
       </div>
     </>
+  );
+}
+
+function LinhaConexao({ canal, onConectar, onDesconectar }) {
+  const st = STATUS_CX[statusConexao(canal.chave)] || STATUS_CX.desconectado;
+  const conectado = statusConexao(canal.chave) === 'conectado';
+  return (
+    <div className="flex items-center gap-3.5 px-[18px] py-3 border-b border-border last:border-b-0">
+      <div className="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0 font-bold text-[12px]" style={{ background: canal.cor, color: canal.corTexto }}>{canal.nome[0]}</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-[13px] flex items-center gap-2">
+          {canal.nome}
+          <span className={['inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-[2px] rounded-full', st.cls].join(' ')}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} /> {st.label}
+          </span>
+        </div>
+        <div className="text-[11px] text-muted-2 mt-0.5 leading-snug">{canal.nota}</div>
+      </div>
+      {conectado
+        ? <button onClick={() => onDesconectar(canal.chave, canal.nome)} className="text-[12.5px] font-semibold text-red hover:underline px-2">Desconectar</button>
+        : <button onClick={() => onConectar(canal.chave, canal.nome)} className="text-[12.5px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-lg px-3.5 py-2">Conectar</button>}
+    </div>
   );
 }
 

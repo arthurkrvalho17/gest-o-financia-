@@ -22,7 +22,7 @@ function v(o) {
 const aVenda = [
   v({ codigo: '8180569', modelo: 'Fazer YS250', fab_mod: '2015/2015', cor: 'Preto', placa: 'PAJ3H94', tipo: 'proprio', entrada: '2026-06-12', situacao: 'estoque', compra: 12500, pedido: 16900, minimo: 15500 }),
   v({ codigo: '8179093', modelo: 'Palio Fire', fab_mod: '2016/2016', cor: 'Prata', placa: 'PAR4046', tipo: 'consignado', entrada: '2026-06-11', situacao: 'estoque', compra: 29900, pedido: 32900, minimo: 31000 }),
-  v({ codigo: '8176153', modelo: 'Corolla GLI Flex', fab_mod: '2012/2013', cor: 'Preto', placa: 'JKE2297', tipo: 'proprio', entrada: '2026-06-11', situacao: 'estoque', compra: 53000, pedido: 62900, minimo: 59000 }),
+  v({ codigo: '8176153', modelo: 'Corolla GLI Flex', fab_mod: '2012/2013', cor: 'Preto', placa: 'JKE2297', tipo: 'proprio', entrada: '2026-06-11', situacao: 'preparacao', compra: 53000, pedido: 62900, minimo: 59000 }),
   v({ codigo: '8173736', modelo: 'Cruze LTZ HB', fab_mod: '2012/2012', cor: 'Preto', placa: 'JKC1933', tipo: 'consignado', entrada: '2026-06-10', situacao: 'estoque', compra: 55000, pedido: 58900, minimo: 56500, marcador_texto: 'REPASSE', marcador_cor: '#B5704A' }),
   v({ codigo: '8173719', modelo: 'Golf Highline AA', fab_mod: '2013/2014', cor: 'Preto', placa: 'JKQ7445', tipo: 'consignado', entrada: '2026-06-10', situacao: 'reservado', compra: 60000, pedido: 64900, minimo: 62000 }),
   v({ codigo: '8173682', modelo: 'Gol Special MB', fab_mod: '2015/2015', cor: 'Branco', placa: 'PQC3867', tipo: 'consignado', entrada: '2026-06-10', situacao: 'estoque', compra: 36000, pedido: 38900, minimo: 37000 }),

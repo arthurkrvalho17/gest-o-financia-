@@ -11,15 +11,18 @@ import MarcadorModal from './MarcadorModal';
 import PublicarModal from './PublicarModal';
 import DesempenhoVendedores from './DesempenhoVendedores';
 import FichaDocumentosModal from './FichaDocumentosModal';
+import FichaCarroModal from './FichaCarroModal';
 import { countDocs } from './demoDocs';
+import { gerarEstoquePdf } from './estoquePdf';
 
 const SIT = {
   estoque: { label: 'Estoque', cls: 'bg-green-soft text-green', dot: '#15803D' },
   reservado: { label: 'Reservado', cls: 'bg-amber-soft text-amber', dot: '#B45309' },
+  preparacao: { label: 'Preparação', cls: 'bg-blue-soft text-blue', dot: '#185FA5' },
   vendido: { label: 'Vendido', cls: 'bg-[#EEF2F7] text-muted', dot: '#94A3B8' },
   repasse: { label: 'Repasse', cls: 'bg-[#F4E3DA] text-[#9A4B22]', dot: '#9A4B22' },
 };
-const ahVendaSit = ['estoque', 'reservado'];
+const ahVendaSit = ['estoque', 'reservado', 'preparacao'];
 const vendidoSit = ['vendido', 'repasse'];
 const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
 
@@ -40,6 +43,8 @@ export default function EstoquePage() {
   const [acoesAlvo, setAcoesAlvo] = useState(null);
   const [pubAlvo, setPubAlvo] = useState(null);
   const [fichaAlvo, setFichaAlvo] = useState(null);
+  const [fichaCarroAlvo, setFichaCarroAlvo] = useState(null);
+  const [comCapaCatalogo, setComCapaCatalogo] = useState(true);
 
   const vendaPorVeiculo = useMemo(() => {
     const m = {};
@@ -75,8 +80,8 @@ export default function EstoquePage() {
   function limparFiltros() {
     setBusca(''); setFiltroCor(''); setFiltroTipo(''); setFiltroSit('');
   }
-  // 11 base (até Venda, incl. Tempo) + 1 Docs (sempre) + 3 só dono (Compra, Mínimo, Lucro) + 2 à venda (Marcador, Ações)
-  const nColunas = 12 + (ehDono ? 3 : 0) + (mode === 'venda' ? 2 : 0);
+  // 11 base (Cód…Situação, Mínimo, Venda; sem Saída) + 1 Docs + 2 só dono (Compra, Lucro) + 2 à venda (Marcador, Ações)
+  const nColunas = 12 + (ehDono ? 2 : 0) + (mode === 'venda' ? 2 : 0);
 
   async function onAddSave(dados) {
     const { error } = await addVeiculo(dados);
@@ -176,17 +181,30 @@ export default function EstoquePage() {
                 Limpar filtros
               </button>
             )}
+            {mode === 'venda' && (
+              <div className="ml-auto flex items-center gap-2.5">
+                <label className="flex items-center gap-1.5 text-[12px] text-muted cursor-pointer">
+                  <input type="checkbox" checked={comCapaCatalogo} onChange={(e) => setComCapaCatalogo(e.target.checked)} />
+                  Com capa
+                </label>
+                <button onClick={() => gerarEstoquePdf({ veiculos: aVenda, config: { assinatura_nome: loja?.nome }, comCapa: comCapaCatalogo })}
+                  className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-navy bg-white border border-border rounded-lg px-3 py-1.5 hover:bg-bg">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
+                  PDF do estoque
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  {['Cód', 'Modelo', 'Fab/Mod', 'Cor', 'Placa', 'Tipo', 'Entrada', 'Saída', 'Tempo', 'Situação'].map((h) => (
+                  {['Cód', 'Modelo', 'Fab/Mod', 'Cor', 'Placa', 'Tipo', 'Entrada', 'Tempo', 'Situação'].map((h) => (
                     <Th key={h}>{h}</Th>
                   ))}
                   {ehDono && <Th r>Compra</Th>}
-                  {ehDono && <Th r>Mínimo</Th>}
+                  <Th r>Mínimo</Th>
                   <Th r>Venda</Th>
                   {ehDono && <Th r>Lucro</Th>}
                   {mode === 'venda' && <Th>Marcador</Th>}
@@ -214,7 +232,7 @@ export default function EstoquePage() {
                     return (
                       <tr key={v.id} className="hover:bg-[#FBFCFE]">
                         <Td className="num text-muted font-semibold">{v.codigo || '—'}</Td>
-                        <Td><span className="text-blue font-semibold">{v.modelo}</span></Td>
+                        <Td><button onClick={() => setFichaCarroAlvo(v)} className="text-blue font-semibold hover:underline text-left">{v.modelo}</button></Td>
                         <Td className="num">{v.fab_mod || '—'}</Td>
                         <Td>{v.cor || '—'}</Td>
                         <Td className="num">{v.placa || '—'}</Td>
@@ -224,7 +242,6 @@ export default function EstoquePage() {
                           </span>
                         </Td>
                         <Td className="num">{ddmm(v.entrada) || '—'}</Td>
-                        <Td className="num">{ddmm(v.saida) || <span className="text-muted-2">—</span>}</Td>
                         <Td className="num font-bold" style={mode === 'vendidos' ? { color: '#94A3B8' } : { color: corTempoEstoque(diasDesde(v.entrada)) }}>
                           {(mode === 'vendidos' ? diasEntre(v.entrada, v.saida) : diasDesde(v.entrada))}d
                         </Td>
@@ -235,7 +252,7 @@ export default function EstoquePage() {
                           </span>
                         </Td>
                         {ehDono && <Td r className="num text-muted">{fmt(v.compra)}</Td>}
-                        {ehDono && <Td r className="num text-muted">{fmt(v.minimo)}</Td>}
+                        <Td r className="num text-muted">{fmt(v.minimo)}</Td>
                         <Td r className="num font-medium">{fmt(valorVenda)}</Td>
                         {ehDono && <Td r className="num font-bold" style={{ color: lucro < 0 ? '#B91C1C' : '#15803D' }}>{fmt(lucro)}</Td>}
                         {mode === 'venda' && (
@@ -286,6 +303,7 @@ export default function EstoquePage() {
       <RegistrarVendaModal open={!!vendaAlvo} veiculo={vendaAlvo} custos={vendaAlvo ? custosDe(vendaAlvo) : 0} equipe={equipe} ehDono={ehDono} onClose={() => setVendaAlvo(null)} onConfirm={onVendaConfirm} />
       <PublicarModal open={!!pubAlvo} veiculo={pubAlvo} config={{ assinatura_nome: loja?.nome }} onClose={() => setPubAlvo(null)} onToast={toast} />
       <FichaDocumentosModal open={!!fichaAlvo} veiculo={fichaAlvo} onClose={() => setFichaAlvo(null)} onToast={toast} />
+      <FichaCarroModal open={!!fichaCarroAlvo} veiculo={fichaCarroAlvo} ehDono={ehDono} custos={fichaCarroAlvo ? custosDe(fichaCarroAlvo) : 0} config={{ assinatura_nome: loja?.nome }} onClose={() => setFichaCarroAlvo(null)} />
 
       {/* Menu de ações do veículo */}
       <Modal open={!!acoesAlvo} onClose={() => setAcoesAlvo(null)} title={acoesAlvo?.modelo || 'Ações'} maxWidth={340}>

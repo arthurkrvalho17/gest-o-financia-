@@ -67,12 +67,9 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
     >
       <div className="text-[12.5px] text-muted mb-4 leading-relaxed">
         <b className="text-navy">{veiculo.modelo}</b> · {veiculo.placa}
-        {ehDono && (
-          <>
-            <br />
-            {rotuloCompra} {fmt(veiculo.compra)} · preparação {fmt(custos)} · mínimo {fmt(veiculo.minimo)}
-          </>
-        )}
+        <br />
+        {ehDono && <>{rotuloCompra} {fmt(veiculo.compra)} · preparação {fmt(custos)} · </>}
+        mínimo {fmt(veiculo.minimo)}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -107,7 +104,7 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
         </Field>
       </div>
 
-      {ehDono && abaixoMin && (
+      {abaixoMin && (
         <div className="bg-amber-soft text-amber text-[12px] font-semibold px-3 py-2.5 rounded-lg mt-3.5 flex gap-2 items-center">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[15px] h-[15px] flex-shrink-0">
             <path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z" />
