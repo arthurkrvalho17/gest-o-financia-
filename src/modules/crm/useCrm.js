@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVendas, demoVeiculos } from '../estoque/demoData';
-import { leadsDemo, setLeadsDemo, novoLeadDemo, posVendaDemo, historicoCrm, conversasDemo, enviarMensagemDemo } from './demoCrm';
+import { leadsDemo, setLeadsDemo, novoLeadDemo, historicoCrm, conversasDemo, enviarMensagemDemo,
+  getRegras, setRegra, distribuir, nomeVendedor, novoLeadDistribuido } from './demoCrm';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
 const MES_ATUAL = new Date().toISOString().slice(0, 7);
@@ -42,13 +43,14 @@ export function useCrm() {
     carregar();
   }, [carregar]);
 
-  // Normaliza o lead para exibição (resolve carro/valor).
+  // Normaliza o lead para exibição (resolve carro/valor/origem/vendedor).
   const leads = useMemo(() => {
     void tick;
     return (demo ? leadsDemo() : leadsRaw).map((ld) => {
-      if (demo) return { ...ld, carLabel: ld.car_label, valor: ld.valor };
+      const base = { ...ld, origem: ld.canal_origem, vendedorNome: nomeVendedor(ld.vendedor_id) };
+      if (demo) return { ...base, carLabel: ld.car_label, valor: ld.valor };
       const v = veiculos.find((x) => x.id === ld.veiculo_id);
-      return { ...ld, carLabel: v?.modelo || '—', valor: v?.pedido || 0 };
+      return { ...base, carLabel: v?.modelo || '—', valor: v?.pedido || 0 };
     });
   }, [demo, leadsRaw, veiculos, tick]);
 
@@ -56,7 +58,8 @@ export function useCrm() {
   const leadsMes = leads.filter((x) => mesDe(x.criado_em) === MES_ATUAL).length;
   const vendasMes = vendas.filter((x) => mesDe(x.data_venda) === MES_ATUAL).length;
   const conversao = leadsMes > 0 ? Math.round((vendasMes / leadsMes) * 100) + '%' : '0%';
-  const negociosAbertos = leads.filter((x) => ['novo', 'conversa', 'simulacao', 'ficha'].includes(x.etapa)).length;
+  const abertasEtapas = ['novo', 'conversa', 'negociacao', 'agendado', 'ficha'];
+  const negociosAbertos = leads.filter((x) => abertasEtapas.includes(x.etapa)).length;
 
   function leadsPorEtapa(etapa) {
     return leads.filter((x) => x.etapa === etapa);
@@ -84,7 +87,8 @@ export function useCrm() {
       loja_id: lojaId,
       nome: dados.nome,
       telefone: dados.telefone || null,
-      origem: dados.origem,
+      canal_origem: dados.origem,
+      vendedor_id: dados.vendedor_id || null,
       etapa: 'novo',
       veiculo_id: dados.veiculo_id || null,
     });
@@ -92,14 +96,19 @@ export function useCrm() {
     return { error };
   }
 
-  // Pós-venda: demo usa seed; real deriva das vendas (sem rastreio de etapas ainda).
-  const posVenda = demo
-    ? posVendaDemo
-    : vendas.map((v) => ({
-        nome: v.comprador_nome || 'Cliente',
-        carro: (veiculos.find((x) => x.id === v.veiculo_id)?.modelo || '—') + ' · ' + (v.data_venda || ''),
-        steps: [['Entrega', 'none'], ['Transferência', 'none'], ['Avaliação', 'none'], ['Indicação', 'none']],
-      }));
+  // Distribuição automática: simula um lead chegando de um canal → entra em "Novo
+  // lead" já com o vendedor responsável pela regra do canal.
+  function simularLead(canal) {
+    const nomes = ['Carlos Aguiar', 'Fernanda Lima', 'Paulo Sérgio', 'Beatriz Nunes', 'Diego Ramos'];
+    const nome = nomes[Math.floor(Math.random() * nomes.length)];
+    if (demo) {
+      const lead = novoLeadDistribuido({ nome, telefone: '(11) 9' + Math.floor(10000000 + Math.random() * 8e7), canal, carLabel: 'A definir', valor: 0 });
+      setLeadsDemo([lead, ...leadsDemo()]);
+      setTick((t) => t + 1);
+      return lead;
+    }
+    return null;
+  }
 
   // Histórico: demo usa seed; real agrega leads x vendas por mês (últimos meses).
   const historico = demo ? historicoCrm : historicoReal(leads, vendas);
@@ -118,10 +127,14 @@ export function useCrm() {
     // real: insert em "mensagem" + envio via getConectorMensageria (fase futura)
   }
 
+  function definirRegra(canal, regra) { setRegra(canal, regra); setTick((t) => t + 1); }
+
   return {
     demo, loading, leads, leadsMes, conversao, negociosAbertos,
-    leadsPorEtapa, moverLead, addLead, veiculos, posVenda, historico,
+    leadsPorEtapa, moverLead, addLead, veiculos, historico,
     conversas, enviarMensagem,
+    // distribuição
+    getRegras, definirRegra, simularLead,
   };
 }
 

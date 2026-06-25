@@ -105,7 +105,7 @@ export function useEstoque() {
     return { error };
   }
 
-  async function registrarVenda(veic, { valor_venda, data_venda, comprador_nome, forma_pagamento, vendedor_id, observacao }) {
+  async function registrarVenda(veic, { valor_venda, data_venda, comprador_nome, forma_pagamento, origem_lead, vendedor_id, observacao }) {
     const novaSituacao = veic.tipo === 'consignado' ? 'repasse' : 'vendido';
     if (demo) {
       const venda = {
@@ -116,6 +116,7 @@ export function useEstoque() {
         data_venda,
         comprador_nome,
         forma_pagamento,
+        origem_lead,
         vendedor_id,
         observacao,
       };
@@ -134,6 +135,7 @@ export function useEstoque() {
       data_venda,
       comprador_nome: comprador_nome || null,
       forma_pagamento,
+      origem_lead: origem_lead || null,
       vendedor_id: vendedor_id || usuario?.id || null,
       observacao: observacao || null,
     });

@@ -6,6 +6,7 @@ import { getEquipeDemo, addVendedorDemo, removeVendedorDemo } from '../estoque/d
 import { CANAIS_ANUNCIO, CANAIS_MENSAGERIA } from '../../integracoes/canais';
 import { statusConexao, setStatusConexao } from '../../integracoes/demoIntegr';
 import { getIdentidade, setIdentidade } from '../../lib/lojaIdentidade';
+import { getRegras, setRegra, CANAIS_DISTRIBUICAO, ORIGENS } from '../crm/demoCrm';
 
 const STATUS_CX = {
   conectado: { label: 'Conectado', cls: 'bg-green-soft text-green', dot: '#15803D' },
@@ -150,6 +151,40 @@ export default function ConfiguracoesPage() {
             Vendedores são usuários da loja (mesma base do login). No sistema real, adicionar envia um convite de acesso.
           </div>
         </div>
+       </div>
+
+       {/* Distribuição de leads por canal → vendedor */}
+       <div className="bg-white border border-border rounded-card shadow-card overflow-hidden mt-[18px]">
+         <div className="flex items-center justify-between px-[18px] py-[15px] border-b border-border">
+           <h2 className="text-[14.5px] font-semibold">Distribuição de leads</h2>
+           <span className="text-[12px] text-muted-2">para onde vai cada canal</span>
+         </div>
+         {CANAIS_DISTRIBUICAO.map((canal) => {
+           const r = getRegras()[canal];
+           const valor = !r ? '' : r.tipo === 'rodizio' ? 'rodizio' : `fixo:${r.vendedores[0]}`;
+           return (
+             <div key={canal} className="flex items-center gap-3 px-[18px] py-3 border-b border-border last:border-b-0">
+               <span className="flex-1 font-semibold text-[13px]">{ORIGENS[canal]?.label || canal}</span>
+               <select value={valor}
+                 onChange={(e) => {
+                   const v = e.target.value;
+                   if (!v) setRegra(canal, null);
+                   else if (v === 'rodizio') setRegra(canal, { tipo: 'rodizio', vendedores: equipe.map((u) => u.id) });
+                   else setRegra(canal, { tipo: 'fixo', vendedores: [v.slice(5)] });
+                   force((n) => n + 1);
+                   toast('Regra de distribuição atualizada');
+                 }}
+                 className="text-[12.5px] border border-border rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-blue min-w-[200px]">
+                 <option value="">— sem regra (distribuir manual) —</option>
+                 {equipe.map((u) => <option key={u.id} value={`fixo:${u.id}`}>{u.nome}</option>)}
+                 <option value="rodizio">Rodízio entre todos</option>
+               </select>
+             </div>
+           );
+         })}
+         <div className="px-[18px] py-2.5 text-[11.5px] text-muted-2 bg-[#FAFBFD]">
+           Leads que chegam por cada canal entram no funil em "Novo lead" já com o vendedor responsável.
+         </div>
        </div>
 
        {/* Conexões */}

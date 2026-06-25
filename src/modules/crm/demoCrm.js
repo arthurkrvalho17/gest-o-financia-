@@ -1,29 +1,40 @@
-// Dados de demonstração do CRM (leads em memória, mutável) + histórico e pós-venda.
+// Dados de demonstração do CRM (leads em memória, mutável) + histórico + distribuição.
+import { getEquipeDemo } from '../estoque/demoData';
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() || 'demo-' + Math.random().toString(36).slice(2);
 
-// Etapas do funil (financiamento): novo|conversa|simulacao|ficha|fechado
+// Colunas do funil: novo|conversa|negociacao|agendado|ficha|posvenda
 export const ETAPAS = [
   { key: 'novo', label: 'Novo lead', accent: '#94A3B8' },
   { key: 'conversa', label: 'Em conversa', accent: '#185FA5' },
-  { key: 'simulacao', label: 'Simulação enviada', accent: '#7C3AED' },
+  { key: 'negociacao', label: 'Negociação', accent: '#7C3AED' },
+  { key: 'agendado', label: 'Agendado', accent: '#0EA5E9' },
   { key: 'ficha', label: 'Ficha aprovada', accent: '#15803D' },
-  { key: 'fechado', label: 'Fechado', accent: '#0A1628' },
+  { key: 'posvenda', label: 'Pós-venda', accent: '#0A1628' },
 ];
 
+// Canais/origens de lead (também as opções de origem na venda e na distribuição)
 export const ORIGENS = {
+  traf_pago: { label: 'Tráfego pago', cls: 'bg-[#FCF6E3] text-[#A07908]' },
+  mercado_livre: { label: 'Mercado Livre', cls: 'bg-[#FCF6E3] text-[#A07908]' },
+  olx: { label: 'OLX', cls: 'bg-[#F1ECFB] text-[#6E0AD6]' },
+  webmotors: { label: 'Webmotors', cls: 'bg-[#FBEAEA] text-[#B91C1C]' },
+  instagram: { label: 'Instagram', cls: 'bg-[#FBEAF3] text-[#A21670]' },
   whatsapp: { label: 'WhatsApp', cls: 'bg-[#E7F6EC] text-[#15803D]' },
-  portal: { label: 'Portal', cls: 'bg-[#EAF0FB] text-[#185FA5]' },
-  indicacao: { label: 'Indicação', cls: 'bg-[#FBEAF3] text-[#A21670]' },
+  indicacao: { label: 'Indicação', cls: 'bg-[#EAF0FB] text-[#185FA5]' },
   balcao: { label: 'Balcão', cls: 'bg-[#EEF2F7] text-[#475569]' },
+  outro: { label: 'Outro', cls: 'bg-[#EEF2F7] text-[#475569]' },
 };
+// Canais que recebem regra de distribuição por portal
+export const CANAIS_DISTRIBUICAO = ['traf_pago', 'mercado_livre', 'olx', 'webmotors', 'instagram', 'whatsapp'];
 
-const l = (nome, telefone, origem, etapa, carLabel, valor, diaJunho) => ({
+const l = (nome, telefone, canal, etapa, carLabel, valor, diaJunho, vendedor_id = null) => ({
   id: uid(),
   nome,
   telefone,
-  origem,
+  canal_origem: canal,
+  vendedor_id,
   etapa,
   car_label: carLabel, // conveniência do demo (no real vem de veiculo_id)
   valor,
@@ -31,18 +42,18 @@ const l = (nome, telefone, origem, etapa, carLabel, valor, diaJunho) => ({
 });
 
 let leadsStore = [
-  l('Marcos Vinícius', '(11) 90000-0001', 'whatsapp', 'novo', 'Onix 1.0 LT', 67900, 14),
-  l('Patrícia Gomes', '(11) 90000-0002', 'portal', 'novo', 'HB20 Comfort', 61500, 13),
-  l('Roberto Dias', '(11) 90000-0003', 'portal', 'conversa', 'Corolla XEI', 104900, 12),
+  l('Marcos Vinícius', '(11) 90000-0001', 'whatsapp', 'novo', 'Onix 1.0 LT', 67900, 14, 'u-lucas'),
+  l('Patrícia Gomes', '(11) 90000-0002', 'olx', 'novo', 'HB20 Comfort', 61500, 13, 'u-pereira'),
+  l('Roberto Dias', '(11) 90000-0003', 'webmotors', 'conversa', 'Corolla XEI', 104900, 12, 'u-lucas'),
   l('Juliana Reis', '(11) 90000-0004', 'indicacao', 'conversa', 'Nivus', 112000, 11),
-  l('Anderson Luz', '(11) 90000-0005', 'whatsapp', 'simulacao', 'Renegade Sport', 92900, 10),
-  l('Camila Souza', '(11) 90000-0006', 'balcao', 'ficha', 'Duster Iconic', 84500, 9),
-  l('Felipe Antunes', '(11) 90000-0007', 'whatsapp', 'ficha', 'Pulse Drive', 81900, 8),
-  l('Sandra Mello', '(11) 90000-0008', 'portal', 'fechado', 'Civic Touring', 139900, 6),
+  l('Anderson Luz', '(11) 90000-0005', 'instagram', 'negociacao', 'Renegade Sport', 92900, 10, 'u-pereira'),
+  l('Camila Souza', '(11) 90000-0006', 'balcao', 'agendado', 'Duster Iconic', 84500, 9),
+  l('Felipe Antunes', '(11) 90000-0007', 'mercado_livre', 'ficha', 'Pulse Drive', 81900, 8, 'u-lucas'),
+  l('Sandra Mello', '(11) 90000-0008', 'traf_pago', 'posvenda', 'Civic Touring', 139900, 6, 'u-pereira'),
   l('Bruno Carvalho', '(11) 90000-0009', 'whatsapp', 'novo', 'Tracker Premier', 114900, 15),
-  l('Tatiane Lopes', '(11) 90000-0010', 'indicacao', 'conversa', 'Creta Action', 118500, 9),
-  l('Ricardo Penha', '(11) 90000-0011', 'balcao', 'simulacao', 'Golf Highline', 64900, 5),
-  l('Aline Ferraz', '(11) 90000-0012', 'whatsapp', 'fechado', 'HB20 Comfort', 61500, 2),
+  l('Tatiane Lopes', '(11) 90000-0010', 'indicacao', 'agendado', 'Creta Action', 118500, 9, 'u-lucas'),
+  l('Ricardo Penha', '(11) 90000-0011', 'olx', 'negociacao', 'Golf Highline', 64900, 5, 'u-pereira'),
+  l('Aline Ferraz', '(11) 90000-0012', 'instagram', 'posvenda', 'HB20 Comfort', 61500, 2, 'u-lucas'),
 ];
 
 export function leadsDemo() {
@@ -51,8 +62,38 @@ export function leadsDemo() {
 export function setLeadsDemo(arr) {
   leadsStore = arr;
 }
+
+// ---- Distribuição automática de leads por canal → vendedor ----
+// regra: { [canal]: { tipo: 'fixo'|'rodizio', vendedores: [id...], _rr: 0 } }
+const regrasStore = {
+  olx: { tipo: 'fixo', vendedores: ['u-lucas'], _rr: 0 },
+  instagram: { tipo: 'fixo', vendedores: ['u-pereira'], _rr: 0 },
+  mercado_livre: { tipo: 'rodizio', vendedores: ['u-lucas', 'u-pereira'], _rr: 0 },
+};
+export function getRegras() { return regrasStore; }
+export function setRegra(canal, regra) {
+  if (!regra || !regra.vendedores?.length) delete regrasStore[canal];
+  else regrasStore[canal] = { ...regra, _rr: regrasStore[canal]?._rr || 0 };
+}
+export function distribuir(canal) {
+  const r = regrasStore[canal];
+  if (!r || !r.vendedores.length) return null;
+  if (r.tipo === 'fixo') return r.vendedores[0];
+  const v = r.vendedores[r._rr % r.vendedores.length]; // rodízio
+  r._rr = (r._rr + 1) % r.vendedores.length;
+  return v;
+}
+export function nomeVendedor(id) {
+  return getEquipeDemo().find((u) => u.id === id)?.nome || null;
+}
+
+// Novo lead já distribuído (entra em "Novo lead" com o vendedor da regra do canal).
+export function novoLeadDistribuido({ nome, telefone, canal, carLabel, valor }) {
+  return l(nome, telefone, canal, 'novo', carLabel || '', valor || 0, new Date().getDate(), distribuir(canal));
+}
+// compat: usado pelo modal "Novo lead" manual
 export function novoLeadDemo({ nome, telefone, origem, carLabel, valor }) {
-  return l(nome, telefone, origem, 'novo', carLabel || '', valor || 0, new Date().getDate());
+  return l(nome, telefone, origem || 'outro', 'novo', carLabel || '', valor || 0, new Date().getDate(), distribuir(origem));
 }
 
 // Pós-venda (derivado das vendas no sistema real; aqui é seed do protótipo).

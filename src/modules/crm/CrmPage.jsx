@@ -4,15 +4,17 @@ import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { fmt } from '../../lib/format';
 import { useCrm } from './useCrm';
-import { ETAPAS, ORIGENS, TEMPLATES_HSM } from './demoCrm';
+import { ETAPAS, ORIGENS, TEMPLATES_HSM, CANAIS_DISTRIBUICAO } from './demoCrm';
 
 export default function CrmPage() {
   const crm = useCrm();
   const toast = useToast();
-  const [aba, setAba] = useState('neg'); // neg | pos
+  const [aba, setAba] = useState('neg'); // neg | conversas
   const [hist, setHist] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [drag, setDrag] = useState(null);
+  const [filtroCanal, setFiltroCanal] = useState('');
+  const [simCanal, setSimCanal] = useState('olx');
 
   if (hist) return <HistoricoView crm={crm} onVoltar={() => setHist(false)} />;
 
@@ -31,7 +33,7 @@ export default function CrmPage() {
     <>
       <Topbar
         titulo="CRM"
-        sub="Negociações e pós-venda"
+        sub="Funil de leads e conversas"
         acao={
           <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-2 bg-blue hover:bg-blue-hover text-white font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px]">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 5v14M5 12h14" /></svg>
@@ -60,7 +62,6 @@ export default function CrmPage() {
             <SubTab on={aba === 'conversas'} onClick={() => setAba('conversas')}>
               Conversas {crm.conversas.length > 0 && <span className="ml-1 text-[10px] bg-green text-white rounded-full px-1.5 py-px align-middle">{crm.conversas.length}</span>}
             </SubTab>
-            <SubTab on={aba === 'pos'} onClick={() => setAba('pos')}>Pós-venda</SubTab>
           </div>
           <button onClick={() => setHist(true)} className="inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] px-[15px] py-2.5 rounded-[9px] hover:bg-bg">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></svg>
@@ -69,59 +70,64 @@ export default function CrmPage() {
         </div>
 
         {aba === 'neg' ? (
-          <div className="flex gap-3.5 overflow-x-auto pb-1.5">
-            {ETAPAS.map((et) => {
-              const cards = crm.leadsPorEtapa(et.key);
-              return (
-                <div key={et.key} className="flex-[0_0_250px] bg-white border border-border rounded-card shadow-card overflow-hidden self-start"
-                  onDragOver={(e) => e.preventDefault()} onDrop={() => soltar(et.key)}>
-                  <div className="px-3.5 py-3 border-b border-border flex items-center gap-2" style={{ borderTop: `3px solid ${et.accent}` }}>
-                    <span className="text-[12.5px] font-bold">{et.label}</span>
-                    <span className="ml-auto text-[11px] font-bold text-muted bg-bg px-2 py-0.5 rounded-full num">{cards.length}</span>
-                  </div>
-                  <div className="p-2.5 flex flex-col gap-2.5 min-h-[60px]">
-                    {cards.map((ld) => (
-                      <div key={ld.id} draggable onDragStart={() => setDrag(ld)} onDragEnd={() => setDrag(null)}
-                        className="bg-white border border-border rounded-[10px] px-3 py-2.5 shadow-[0_1px_2px_rgba(10,22,40,.04)] cursor-grab hover:border-[#CBD5E1] active:cursor-grabbing">
-                        <div className="font-semibold text-[13px]">{ld.nome}</div>
-                        <div className="text-[11.5px] text-muted mt-0.5">{ld.carLabel || '—'}</div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className={['text-[10px] font-semibold px-1.5 py-0.5 rounded', ORIGENS[ld.origem]?.cls || 'bg-bg text-muted'].join(' ')}>
-                            {ORIGENS[ld.origem]?.label || ld.origem}
-                          </span>
-                          <span className="text-[12.5px] font-bold num">{fmt(ld.valor)}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {cards.length === 0 && <div className="text-[11.5px] text-muted-2 text-center py-3">Arraste leads aqui</div>}
-                  </div>
+          <>
+            {/* Separação por canal + (demo) simular chegada de lead com distribuição */}
+            <div className="flex items-center gap-2.5 mb-3 flex-wrap">
+              <select value={filtroCanal} onChange={(e) => setFiltroCanal(e.target.value)}
+                className={['text-[12.5px] font-medium border border-border rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-blue cursor-pointer', filtroCanal ? 'text-navy' : 'text-muted'].join(' ')}>
+                <option value="">Todos os canais</option>
+                {Object.entries(ORIGENS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              {filtroCanal && <button onClick={() => setFiltroCanal('')} className="text-[12px] font-semibold text-blue hover:underline">Limpar</button>}
+              {crm.demo && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-[11.5px] text-muted-2">Simular lead de:</span>
+                  <select value={simCanal} onChange={(e) => setSimCanal(e.target.value)} className="text-[12.5px] border border-border rounded-lg px-2 py-1.5 bg-white outline-none focus:border-blue">
+                    {CANAIS_DISTRIBUICAO.map((c) => <option key={c} value={c}>{ORIGENS[c].label}</option>)}
+                  </select>
+                  <button onClick={() => { const ld = crm.simularLead(simCanal); toast(ld?.vendedor_id ? `Lead da ${ORIGENS[simCanal].label} → ${crm.leads.find((x) => x.id === ld.id)?.vendedorNome || 'vendedor'}` : `Lead da ${ORIGENS[simCanal].label} (sem regra — distribuir manual)`); }}
+                    className="text-[12.5px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-lg px-3 py-1.5">Simular</button>
                 </div>
-              );
-            })}
-          </div>
-        ) : aba === 'conversas' ? (
-          <Conversas crm={crm} />
-        ) : (
-          <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
-            <div className="flex items-center justify-between px-[18px] py-[15px] border-b border-border">
-              <h2 className="text-[14.5px] font-semibold">Pós-venda</h2>
-              <span className="text-[12px] text-muted-2">clientes após a compra</span>
+              )}
             </div>
-            {crm.posVenda.length === 0 && <div className="px-[18px] py-8 text-center text-muted text-[13px]">Nenhuma venda registrada ainda.</div>}
-            {crm.posVenda.map((p, i) => (
-              <div key={i} className="flex items-center gap-3.5 px-[18px] py-3.5 border-b border-border last:border-b-0 flex-wrap">
-                <div className="font-semibold text-[13.5px] min-w-[150px]">{p.nome}<span className="block text-[11.5px] text-muted-2 font-normal mt-px">{p.carro}</span></div>
-                <div className="flex gap-2 flex-wrap flex-1">
-                  {p.steps.map((s, j) => (
-                    <span key={j} className={['text-[11px] font-semibold px-2.5 py-1 rounded-md',
-                      s[1] === 'ok' ? 'bg-green-soft text-green' : s[1] === 'pend' ? 'bg-amber-soft text-amber' : 'bg-bg text-muted-2'].join(' ')}>
-                      {s[0]}{s[1] === 'ok' ? ' ✓' : s[1] === 'pend' ? ' ⏳' : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+
+            <div className="flex gap-3.5 overflow-x-auto pb-1.5">
+              {ETAPAS.map((et) => {
+                const cards = crm.leadsPorEtapa(et.key).filter((ld) => !filtroCanal || ld.canal_origem === filtroCanal);
+                return (
+                  <div key={et.key} className="flex-[0_0_250px] bg-white border border-border rounded-card shadow-card overflow-hidden self-start"
+                    onDragOver={(e) => e.preventDefault()} onDrop={() => soltar(et.key)}>
+                    <div className="px-3.5 py-3 border-b border-border flex items-center gap-2" style={{ borderTop: `3px solid ${et.accent}` }}>
+                      <span className="text-[12.5px] font-bold">{et.label}</span>
+                      <span className="ml-auto text-[11px] font-bold text-muted bg-bg px-2 py-0.5 rounded-full num">{cards.length}</span>
+                    </div>
+                    <div className="p-2.5 flex flex-col gap-2.5 min-h-[60px]">
+                      {cards.map((ld) => (
+                        <div key={ld.id} draggable onDragStart={() => setDrag(ld)} onDragEnd={() => setDrag(null)}
+                          className="bg-white border border-border rounded-[10px] px-3 py-2.5 shadow-[0_1px_2px_rgba(10,22,40,.04)] cursor-grab hover:border-[#CBD5E1] active:cursor-grabbing">
+                          <div className="font-semibold text-[13px]">{ld.nome}</div>
+                          <div className="text-[11.5px] text-muted mt-0.5">{ld.carLabel || '—'}</div>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className={['text-[10px] font-semibold px-1.5 py-0.5 rounded', ORIGENS[ld.origem]?.cls || 'bg-bg text-muted'].join(' ')}>
+                              {ORIGENS[ld.origem]?.label || ld.origem}
+                            </span>
+                            <span className="text-[12.5px] font-bold num">{fmt(ld.valor)}</span>
+                          </div>
+                          <div className="text-[10.5px] text-muted-2 mt-1.5 flex items-center gap-1">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0112 0v1" /></svg>
+                            {ld.vendedorNome || 'sem dono'}
+                          </div>
+                        </div>
+                      ))}
+                      {cards.length === 0 && <div className="text-[11.5px] text-muted-2 text-center py-3">—</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <Conversas crm={crm} />
         )}
       </div>
 

@@ -8,11 +8,24 @@ const FORMAS = [
   { v: 'consorcio', label: 'Consórcio' },
 ];
 
+// Origem do lead (tráfego pago + portais integrados + complementares).
+const ORIGENS_VENDA = [
+  { v: 'traf_pago', label: 'Tráfego pago' },
+  { v: 'mercado_livre', label: 'Mercado Livre' },
+  { v: 'olx', label: 'OLX' },
+  { v: 'webmotors', label: 'Webmotors' },
+  { v: 'instagram', label: 'Instagram' },
+  { v: 'indicacao', label: 'Indicação' },
+  { v: 'balcao', label: 'Balcão / loja' },
+  { v: 'outro', label: 'Outro' },
+];
+
 export default function RegistrarVendaModal({ open, veiculo, custos, equipe = [], ehDono = true, onClose, onConfirm }) {
   const [valorStr, setValorStr] = useState('');
   const [data, setData] = useState(hojeISO());
   const [comprador, setComprador] = useState('');
   const [forma, setForma] = useState('avista');
+  const [origemLead, setOrigemLead] = useState('');
   const [vendedor, setVendedor] = useState('');
   const [obs, setObs] = useState('');
 
@@ -22,6 +35,7 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
       setData(hojeISO());
       setComprador('');
       setForma('avista');
+      setOrigemLead('');
       setVendedor('');
       setObs('');
     }
@@ -55,6 +69,7 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
                 data_venda: data,
                 comprador_nome: comprador,
                 forma_pagamento: forma,
+                origem_lead: origemLead || null,
                 vendedor_id: vendedor || null,
                 observacao: obs || null,
               })
@@ -92,10 +107,17 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
           <input value={comprador} onChange={(e) => setComprador(e.target.value)} placeholder="Nome do cliente"
             className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
         </Field>
-        <Field label="Forma de pagamento" full>
+        <Field label="Forma de pagamento">
           <select value={forma} onChange={(e) => setForma(e.target.value)}
             className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full bg-white">
             {FORMAS.map((f) => <option key={f.v} value={f.v}>{f.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Origem do lead">
+          <select value={origemLead} onChange={(e) => setOrigemLead(e.target.value)}
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full bg-white">
+            <option value="">— de onde veio —</option>
+            {ORIGENS_VENDA.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
           </select>
         </Field>
         <Field label="Observação (opcional)" full>
