@@ -187,7 +187,10 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 - `vendas` — `veiculo_id, valor_venda, data_venda, comprador_nome, forma_pagamento, vendedor_id,
   observacao`. (Alimentam o desempenho de vendedores.)
 - `veiculo_documento` (`0008`) — ficha de documentos do carro (`tipo, arquivo_url,
-  status anexado|assinado|pendente, data`; arquivos no Storage).
+  status anexado|assinado|pendente, data`; arquivos no Storage). Recebe CRLV-e, contratos
+  assinados, ATPV-e, CNH do comprador, etc.
+- `contrato_modelo` (`0009`) — modelo da loja por tipo (`origem padrao|editado|enviado, conteudo,
+  arquivo_url`). O padrão é do sistema; aqui ficam só as versões da loja.
 
 **Preparação** (`0002`)
 - `preparacao_gastos` — `veiculo_id, descricao, data, forma_pgto, valor, status (pago|pendente),
@@ -315,18 +318,22 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
 - **Histórico mês a mês** (leads, vendas, conversão, ticket médio).
 
 ### Contratos ([`src/modules/contratos`](src/modules/contratos))
-- Grade de 6 modelos (compra e venda, recibo de sinal, consignação, procuração, termo de test
-  drive, nota de entrada).
-- Formulário com dados do cliente + **seleção do carro do estoque** (preenche modelo/ano/placa/
-  cor/valor) + **campos específicos por tipo** (qualificação completa, RENAVAM/chassi, arras no
-  recibo, consignante, etc.).
-- **Assinatura da loja** inclusa automaticamente. **Gerar PDF** (`jspdf`) registra o documento.
-- **Modelos da loja**: o lojista sobe o próprio modelo por tipo (placeholders); a UI indica qual
-  modelo está em uso ("Seu modelo" × "Modelo padrão FINANCIA+").
-- **Assinatura eletrônica** (compra e venda): fluxo assinado pela loja → enviado ao cliente →
-  cliente assina pelo celular → PDF lacrado + trilha de auditoria guardados na **ficha do carro**
-  com status "Assinado". Assinatura **avançada** (Lei 14.063/2020) via plataforma externa (ex.:
-  ZapSign) — hoje simulada. A **ATPV-e** (Detran) é tratada à parte, sem promessa de transferência.
+- Grade de modelos (compra e venda, recibo de sinal, consignação, procuração, termo de test drive).
+- Formulário: dados do cliente (nome, CPF, telefone, **data de nascimento** — sem profissão/RG) +
+  **seleção do carro do estoque** (preenche tudo) + **campos específicos por tipo**.
+- **Modelos padrão FINANCIA+** ([`modelosPadrao.js`](src/modules/contratos/modelosPadrao.js)) com
+  `{{placeholders}}`: clicáveis para **ver e editar** ("Editar como meu modelo"); sempre há duas
+  versões — **Padrão FINANCIA+** (intacto) e **Seu modelo (editado)** — com "Voltar ao padrão" e
+  "Enviar modelo próprio". Preservar o padrão é proposital (responsabilidade da edição é do lojista).
+- **Gerar PDF** (→ assinatura) e **Gerar DOCX editável** — mesmo motor de template
+  ([`gerarDocumento.js`](src/modules/contratos/gerarDocumento.js)) preenchendo o modelo ativo.
+- **Assinatura eletrônica** (avançada, Lei 14.063/2020) em **3 vias**: assinar no aparelho (canvas),
+  enviar link (WhatsApp/e-mail) ou imprimir. O documento (assinado pela loja + cliente) vai para a
+  **ficha do carro** — Assinado, ou Pendente na via impressão. Plataforma externa (ZapSign) — hoje
+  simulada. A **ATPV-e** (Detran) é só guardada, sem promessa de transferência.
+- **Histórico**: atalho que abre todos os documentos gerados, agrupados por tipo, com busca por
+  cliente/carro/tipo/data (mesma fonte da ficha do carro).
+- **CRLV-e**: enviado no cadastro do veículo, fica guardado na ficha do carro.
 
 ---
 
