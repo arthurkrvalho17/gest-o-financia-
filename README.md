@@ -295,7 +295,8 @@ Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em
 Ao abrir um carro, planilha editável de gastos com total automático. **Adicionar gasto abre um
 formulário** ([`GastoPreparacaoForm`](src/modules/preparacao/GastoPreparacaoForm.jsx)) — carro do
 estoque, descrição, valor, status pago/pendente, observação (data automática) — com dois pontos de
-entrada: botão no topo (sem carro) e dentro da planilha do carro (carro pré-selecionado). **Esse
+entrada: botão no topo (sem carro) e dentro da planilha do carro (carro pré-selecionado). Escolhido o
+carro **uma vez**, dá para lançar **vários gastos de uma só vez** ("Adicionar outro gasto"). **Esse
 total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte única (`gasto_preparacao`).
 
 ### Financeiro ([`src/modules/financeiro`](src/modules/financeiro)) — *só dono*
@@ -324,7 +325,12 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
 - **Histórico mês a mês** (leads, vendas, conversão, ticket médio).
 
 ### Contratos ([`src/modules/contratos`](src/modules/contratos))
-- Grade de modelos (compra e venda, recibo de sinal, consignação, procuração, termo de test drive).
+- Grade de **5 modelos** (compra e venda, recibo de sinal, consignação, procuração, termo de test
+  drive). Documentos saem com **logo/nome da loja em destaque** no cabeçalho e "Financia+" pequeno
+  (identidade editável em Configurações → Identidade da loja: nome/CNPJ/logo).
+- **Consignação**: o consignante é **empresa** (razão social, CNPJ, telefone, endereço) e vem
+  **preenchido automaticamente** do cadastro do veículo consignado. **Recibo de sinal** inclui o
+  endereço do cliente e o valor do sinal (`{{valor_sinal}}`).
 - Formulário: dados do cliente (nome, CPF, telefone, **data de nascimento** — sem profissão/RG) +
   **seleção do carro do estoque** (preenche tudo) + **campos específicos por tipo**.
 - **Modelos padrão FINANCIA+** ([`modelosPadrao.js`](src/modules/contratos/modelosPadrao.js)) com
