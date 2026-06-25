@@ -201,9 +201,11 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
   observacoes, lembrete_*`. A "preparação dos carros" **não** é duplicada aqui — vem de
   `preparacao_gastos` filtrada pelo mês.
 
-**CRM** (`0004`)
-- `leads` — `nome, telefone, origem (whatsapp|portal|indicacao|balcao), etapa
-  (novo|conversa|simulacao|ficha|fechado), veiculo_id`.
+**CRM** (`0004`, `0011`)
+- `leads` — `nome, telefone, canal_origem, vendedor_id, etapa
+  (novo|conversa|negociacao|agendado|ficha|posvenda), veiculo_id`.
+- `regra_distribuicao` (`0011`) — `canal, tipo (fixo|rodizio), vendedores (jsonb)`.
+- `vendas.origem_lead` (`0011`) — de onde veio a venda (relatório de vendas por canal).
 
 **Contratos** (`0005`, `0006`, `0008`)
 - `loja_config` — `assinatura_nome, assinatura_cnpj, logo_url`.
@@ -273,7 +275,8 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   atalhos "Buscar pela placa" / "Enviar CRLV-e" (previstos, hoje "em breve").
 - **Marcador** editável (texto + cor).
 - **Registrar venda**: valor real com **lucro ao vivo** + **aviso de abaixo do mínimo**, data,
-  **vendedor** (equipe da loja), comprador, forma de pagamento, observação. Move o carro para
+  **vendedor** (equipe da loja), comprador, forma de pagamento, **origem do lead** (de onde veio a
+  venda — tráfego pago/portais), observação. Move o carro para
   vendidos (consignado → repasse). Lucro nunca guardado fixo.
 - **Publicar / status** por canal (ver seção 8).
 - **Ficha de documentos** por carro (à venda e vendido): anexar por tipo (ATPV-e, CRLV-e, CRV,
@@ -289,6 +292,8 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   no **Registrar venda**; remover, some. (No real, adicionar envia um convite de acesso.)
 - **Conexões**: conectar/desconectar os canais da loja (anúncio + WhatsApp) — antes era página
   separada, agora vive aqui. As credenciais são da loja; o FINANCIA+ só orquestra.
+- **Identidade da loja**: nome, CNPJ e logo (a logo entra em destaque no cabeçalho dos PDFs).
+- **Distribuição de leads**: regra por canal → vendedor (fixo/rodízio) usada pelo CRM.
 
 ### Preparação ([`src/modules/preparacao`](src/modules/preparacao))
 Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em preparo / pronto).
@@ -318,10 +323,12 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
 
 ### CRM ([`src/modules/crm`](src/modules/crm))
 - **3 KPIs** (leads do mês, conversão, negócios em aberto).
-- **Negociações**: funil kanban arrastável (Novo lead → Em conversa → Simulação enviada →
-  Ficha aprovada → Fechado); a etapa persiste a cada movimento.
+- **Negociações**: funil kanban arrastável — Novo lead → Em conversa → Negociação → Agendado →
+  Ficha aprovada → Pós-venda; a etapa persiste a cada movimento. Cada card mostra o canal de
+  origem e o **vendedor responsável**; dá para **filtrar por canal**.
+- **Distribuição automática**: regra por canal → vendedor (fixo ou rodízio), configurada em
+  Configurações. Leads que chegam por cada canal entram em "Novo lead" já atribuídos.
 - **Conversas**: inbox de WhatsApp amarrado ao lead (ver seção 8).
-- **Pós-venda**: etapas por cliente (entrega/transferência/avaliação/indicação).
 - **Histórico mês a mês** (leads, vendas, conversão, ticket médio).
 
 ### Contratos ([`src/modules/contratos`](src/modules/contratos))
