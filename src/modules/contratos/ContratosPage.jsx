@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Topbar } from '../../components/Layout';
+import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { fmt, ddmm } from '../../lib/format';
 import { IconContratos } from '../../components/icons';
 import { useContratos } from './useContratos';
 import { MODELOS, ORDEM_MODELOS, camposExtra } from './modelos';
-import { gerarPdf } from './contratoPdf';
+import { montarDados, exportarPdf, exportarDocx } from './gerarDocumento';
+import ModeloModal from './ModeloModal';
+import AssinaturaModal from './AssinaturaModal';
 
 export default function ContratosPage() {
   const ct = useContratos();
   const toast = useToast();
   const [tipo, setTipo] = useState(null);
+  const [modeloAlvo, setModeloAlvo] = useState(null);
+  const [histAberto, setHistAberto] = useState(false);
 
   if (tipo) return <Gerador ct={ct} tipo={tipo} onVoltar={() => setTipo(null)} />;
 
@@ -41,54 +46,92 @@ export default function ContratosPage() {
         </Painel>
 
         {/* Modelos da loja */}
-        <Painel titulo="Modelos da loja" hint="suba o seu modelo (Word/PDF) por tipo" className="mt-[18px]">
-          {ORDEM_MODELOS.map((k) => (
-            <div key={k} className="flex items-center gap-3.5 px-[18px] py-3 border-b border-border last:border-b-0">
-              <div className="flex-1">
-                <div className="font-semibold text-[13.5px]">{MODELOS[k].nome}</div>
-                <div className="text-[11.5px] mt-px">
-                  {ct.modeloDe(k)
-                    ? <span className="text-green font-semibold">Seu modelo: {ct.modeloDe(k).arquivo_nome}</span>
-                    : <span className="text-muted-2">Usando modelo padrão FINANCIA+</span>}
+        <Painel titulo="Modelos da loja" hint="clique para ver, editar ou enviar o seu" className="mt-[18px]">
+          {ORDEM_MODELOS.map((k) => {
+            const m = ct.modeloDe(k);
+            return (
+              <button key={k} onClick={() => setModeloAlvo(k)}
+                className="w-full text-left flex items-center gap-3.5 px-[18px] py-3 border-b border-border last:border-b-0 hover:bg-bg">
+                <span className="w-[34px] h-[34px] rounded-[9px] bg-blue-soft text-blue grid place-items-center flex-shrink-0">
+                  <IconContratos className="w-4 h-4" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[13.5px]">{MODELOS[k].nome}</div>
+                  <div className="text-[11.5px] mt-px">
+                    {m ? <span className="text-green font-semibold">Seu modelo: {m.arquivo_nome}</span>
+                       : <span className="text-muted-2">Usando modelo padrão FINANCIA+</span>}
+                  </div>
                 </div>
-              </div>
-              {ct.modeloDe(k) && (
-                <button onClick={() => ct.removerModelo(k)} className="text-[12px] font-semibold text-red hover:underline">Remover</button>
-              )}
-              <label className="text-[12px] font-semibold text-blue bg-blue-soft border border-[#D3E3F2] rounded-lg px-3 py-1.5 cursor-pointer hover:bg-[#dde9f6]">
-                {ct.modeloDe(k) ? 'Trocar' : 'Subir modelo'}
-                <input type="file" accept=".doc,.docx,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && ct.uploadModelo(k, e.target.files[0])} />
-              </label>
-            </div>
-          ))}
+                <span className="text-blue font-semibold text-[12px]">Abrir ▸</span>
+              </button>
+            );
+          })}
           <div className="px-[18px] py-2.5 text-[11.5px] text-muted bg-[#FAFBFD] flex gap-2 items-start leading-snug">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[14px] h-[14px] flex-shrink-0 text-blue mt-px"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-            No seu modelo, use marcadores como <code>{'{{nome}}'}</code>, <code>{'{{cpf}}'}</code>, <code>{'{{placa}}'}</code> nos lugares a preencher — a geração substitui automaticamente.
+            Cada modelo tem a versão <b>Padrão FINANCIA+</b> e a <b>Sua</b> (editada/enviada) — você alterna entre as duas. Os campos <code>{'{{ }}'}</code> são preenchidos na geração.
           </div>
         </Painel>
 
-        <Painel titulo="Documentos gerados" hint="assinatura eletrônica avançada (Lei 14.063/2020)" className="mt-[18px]">
-          {ct.documentos.length === 0 && <div className="px-[18px] py-8 text-center text-muted text-[13px]">Nenhum documento gerado ainda.</div>}
-          {ct.documentos.map((d) => (
-            <div key={d.id} className="flex items-center gap-3.5 px-[18px] py-3.5 border-b border-border last:border-b-0">
-              <span className="w-[38px] h-[38px] rounded-[9px] bg-blue-soft text-blue grid place-items-center flex-shrink-0">
-                <IconContratos className="w-[18px] h-[18px]" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-[13.5px]">{MODELOS[d.tipo]?.nome || d.tipo}</div>
-                <div className="text-[11.5px] text-muted-2 mt-px">{d.titulo || d.cliente_nome} · {ddmm(d.criado_em)}</div>
-              </div>
-              {d.tipo === 'compra_venda' && <Assinatura doc={d} onAvancar={() => toast(ct.avancarAssinatura(d).msg)} />}
-              {d.tipo !== 'compra_venda' && <span className="text-[11px] font-semibold px-2.5 py-[3px] rounded-md bg-bg text-muted">{MODELOS[d.tipo]?.nome?.split(' ')[0] || 'Doc'}</span>}
-            </div>
-          ))}
-          <div className="px-[18px] py-2.5 text-[11.5px] text-muted bg-[#FAFBFD] flex gap-2 items-start leading-snug">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[14px] h-[14px] flex-shrink-0 text-blue mt-px"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-            A assinatura do contrato (loja + cliente) é a <b>avançada</b> e vincula as partes. A <b>ATPV-e</b> (transferência no Detran) é feita no gov.br — aqui só guardamos o arquivo na ficha do carro.
+        <button onClick={() => setHistAberto(true)}
+          className="w-full text-left bg-white border border-border rounded-card shadow-card mt-[18px] px-[18px] py-4 flex items-center gap-3.5 hover:bg-bg">
+          <span className="w-[38px] h-[38px] rounded-[9px] bg-blue-soft text-blue grid place-items-center flex-shrink-0">
+            <IconContratos className="w-[18px] h-[18px]" />
+          </span>
+          <div className="flex-1">
+            <div className="font-semibold text-[13.5px]">Histórico</div>
+            <div className="text-[11.5px] text-muted-2 mt-px">todos os documentos já gerados · {ct.documentos.length}</div>
           </div>
-        </Painel>
+          <span className="text-blue font-semibold text-[12px]">Abrir ▸</span>
+        </button>
       </div>
+
+      <ModeloModal open={!!modeloAlvo} tipo={modeloAlvo} ct={ct} onClose={() => setModeloAlvo(null)} onToast={toast} />
+      <HistoricoModal open={histAberto} documentos={ct.documentos} onClose={() => setHistAberto(false)} />
     </>
+  );
+}
+
+// Histórico de documentos gerados — agrupado por tipo, com busca.
+function HistoricoModal({ open, documentos, onClose }) {
+  const [q, setQ] = useState('');
+  const ST = { assinado: { l: 'Assinado', c: 'bg-green-soft text-green' }, aguardando: { l: 'Aguardando', c: 'bg-amber-soft text-amber' }, pendente: { l: 'Pendente', c: 'bg-amber-soft text-amber' }, nao_enviado: { l: 'Gerado', c: 'bg-bg text-muted' } };
+  const termo = q.trim().toLowerCase();
+  const filtrados = documentos.filter((d) => {
+    if (!termo) return true;
+    return [MODELOS[d.tipo]?.nome, d.titulo, d.cliente_nome, ddmm(d.criado_em)].filter(Boolean).join(' ').toLowerCase().includes(termo);
+  });
+  const porTipo = ORDEM_MODELOS.map((k) => ({ tipo: k, itens: filtrados.filter((d) => d.tipo === k) })).filter((g) => g.itens.length);
+
+  return (
+    <Modal open={open} onClose={onClose} title="Histórico de documentos" maxWidth={620}>
+      <div className="flex items-center gap-2 bg-bg border border-border rounded-lg px-[11px] py-2 text-muted mb-3">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[15px] h-[15px]"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por cliente, carro, tipo ou data" className="bg-transparent outline-none text-[13px] text-navy w-full" />
+      </div>
+      {porTipo.length === 0 && <div className="text-center text-muted text-[13px] py-6">Nenhum documento encontrado.</div>}
+      <div className="flex flex-col gap-4 max-h-[55vh] overflow-y-auto">
+        {porTipo.map((g) => (
+          <div key={g.tipo}>
+            <div className="text-[11.5px] font-bold text-muted uppercase tracking-[.04em] mb-1.5">{MODELOS[g.tipo]?.nome}</div>
+            <div className="rounded-lg border border-border overflow-hidden">
+              {g.itens.map((d) => {
+                const st = ST[d.assinatura_status || 'nao_enviado'] || ST.nao_enviado;
+                return (
+                  <div key={d.id} className="flex items-center gap-3 px-3 py-2.5 odd:bg-[#FAFBFD] border-b border-border last:border-b-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium truncate">{d.titulo || d.cliente_nome}</div>
+                      <div className="text-[11px] text-muted-2">{ddmm(d.criado_em)}</div>
+                    </div>
+                    <span className={['text-[10.5px] font-semibold px-2 py-1 rounded-md', st.c].join(' ')}>{st.l}</span>
+                    <button className="text-[12px] font-semibold text-blue hover:underline">Baixar</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 
@@ -96,9 +139,10 @@ function Gerador({ ct, tipo, onVoltar }) {
   const toast = useToast();
   const modelo = MODELOS[tipo];
   const usandoModeloLoja = ct.modeloDe(tipo);
-  const [cliente, setCliente] = useState({ nome: '', cpf: '', telefone: '' });
+  const [cliente, setCliente] = useState({ nome: '', cpf: '', telefone: '', nascimento: '' });
   const [veicId, setVeicId] = useState('');
   const [extra, setExtra] = useState({});
+  const [assinaturaDoc, setAssinaturaDoc] = useState(null);
   const setC = (k, v) => setCliente((p) => ({ ...p, [k]: v }));
   const setE = (k, v) => setExtra((p) => ({ ...p, [k]: v }));
 
@@ -116,13 +160,29 @@ function Gerador({ ct, tipo, onVoltar }) {
         combustivel: veicSel.combustivel, valor: veicSel.pedido, compra: veicSel.compra }
     : null;
 
-  function gerar() {
+  async function gerar(modo) {
     if (!cliente.nome.trim()) { toast('Informe o nome do cliente.'); return; }
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    gerarPdf({ tipo, config: ct.config, cliente, veiculo: veiculoDoc, extra, dataStr });
+    const conteudo = ct.conteudoAtivoDe(tipo);
+    const dados = montarDados({ config: ct.config, cliente, veiculo: veiculoDoc, extra, dataStr });
+    const tipoNome = modelo.nome;
     const titulo = `${veiculoDoc?.modelo || 'Sem veículo'} · ${cliente.nome}`;
-    ct.registrarDocumento({ tipo, cliente, veiculo: veiculoDoc, extra, titulo });
-    toast(usandoModeloLoja ? 'Documento gerado com o seu modelo' : 'Documento gerado com a assinatura da loja');
+    if (modo === 'docx') {
+      exportarDocx({ conteudo, dados, tipoNome, clienteNome: cliente.nome });
+      await ct.registrarDocumento({ tipo, cliente, veiculo: veiculoDoc, extra, titulo });
+      toast('DOCX gerado — edite no Word antes de assinar');
+      onVoltar();
+      return;
+    }
+    exportarPdf({ conteudo, dados, tipoNome, clienteNome: cliente.nome });
+    const { doc } = await ct.registrarDocumento({ tipo, cliente, veiculo: veiculoDoc, extra, titulo });
+    setAssinaturaDoc(doc); // abre o fluxo de assinatura
+  }
+
+  function concluirAssinatura(via) {
+    const { status } = ct.concluirAssinatura(assinaturaDoc, via, veiculoDoc);
+    setAssinaturaDoc(null);
+    toast(status === 'assinado' ? 'Assinado · guardado na ficha do carro' : 'Aguardando assinatura física · pendente na ficha');
     onVoltar();
   }
 
@@ -154,6 +214,7 @@ function Gerador({ ct, tipo, onVoltar }) {
                 <F label="Nome completo" full><I v={cliente.nome} on={(v) => setC('nome', v)} ph="Nome do cliente" /></F>
                 <F label="CPF"><I v={cliente.cpf} on={(v) => setC('cpf', v)} ph="000.000.000-00" /></F>
                 <F label="Telefone"><I v={cliente.telefone} on={(v) => setC('telefone', v)} ph="(00) 00000-0000" /></F>
+                <F label="Data de nascimento"><input type="date" value={cliente.nascimento} onChange={(e) => setC('nascimento', e.target.value)} className="inp" /></F>
               </div>
 
               <Legenda className="mt-[22px]">Veículo</Legenda>
@@ -208,14 +269,20 @@ function Gerador({ ct, tipo, onVoltar }) {
               <div className={['text-[11.5px] font-semibold rounded-lg px-3 py-2 mt-3.5', usandoModeloLoja ? 'bg-green-soft text-green' : 'bg-blue-soft text-blue'].join(' ')}>
                 {usandoModeloLoja ? `Usando o SEU modelo: ${usandoModeloLoja.arquivo_nome}` : 'Usando o modelo padrão FINANCIA+'}
               </div>
-              <button onClick={gerar} className="w-full justify-center inline-flex items-center gap-2 bg-green hover:bg-[#126b34] text-white font-semibold text-[13px] py-3 rounded-[9px] mt-4">
+              <button onClick={() => gerar('pdf')} className="w-full justify-center inline-flex items-center gap-2 bg-green hover:bg-[#126b34] text-white font-semibold text-[13px] py-3 rounded-[9px] mt-4">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
-                Gerar PDF
+                Gerar PDF e assinar
               </button>
+              <button onClick={() => gerar('docx')} className="w-full justify-center inline-flex items-center gap-2 bg-white border border-border text-navy font-semibold text-[13px] py-2.5 rounded-[9px] mt-2 hover:bg-bg">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
+                Gerar DOCX (editável)
+              </button>
+              <p className="text-[11px] text-muted-2 mt-2 leading-snug">DOCX para alterar algo pontual no Word antes de assinar.</p>
             </div>
           </div>
         </div>
       </div>
+      <AssinaturaModal open={!!assinaturaDoc} onClose={() => setAssinaturaDoc(null)} onConcluir={concluirAssinatura} />
       <style>{`.inp{font-size:13.5px;padding:9px 11px;border:1px solid #E2E8F0;border-radius:8px;outline:none;background:#fff;width:100%}.inp:focus{border-color:#185FA5}`}</style>
     </>
   );
@@ -227,28 +294,6 @@ function DemoBanner() {
       <span className="w-1.5 h-1.5 rounded-full bg-blue inline-block" />
       Modo demonstração. Configure o Supabase no <code>.env.local</code> para dados reais.
     </div>
-  );
-}
-function Assinatura({ doc, onAvancar }) {
-  const s = doc.assinatura_status || 'nao_enviado';
-  if (s === 'assinado') {
-    return <span className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md bg-green-soft text-green flex items-center gap-1">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><path d="M20 6L9 17l-5-5" /></svg>Assinado
-    </span>;
-  }
-  if (s === 'aguardando') {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold px-2 py-1 rounded-md bg-amber-soft text-amber">Aguardando cliente</span>
-        <button onClick={onAvancar} className="text-[12px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-md px-3 py-1.5">Simular assinatura</button>
-      </div>
-    );
-  }
-  return (
-    <button onClick={onAvancar} className="text-[12px] font-semibold text-white bg-green hover:bg-[#126b34] rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
-      Enviar para assinatura
-    </button>
   );
 }
 function Painel({ titulo, hint, className = '', children }) {

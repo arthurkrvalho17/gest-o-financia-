@@ -11,6 +11,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
   const [f, setF] = useState(VAZIO);
   const [fotos, setFotos] = useState([]); // {url, nome} — a primeira é a capa
   const [dragIdx, setDragIdx] = useState(null);
+  const [crlv, setCrlv] = useState(null); // nome do arquivo CRLV-e anexado
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
 
@@ -28,6 +29,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
     if (open) {
       setF(VAZIO);
       setFotos([]);
+      setCrlv(null);
       setErro('');
       setAviso('');
     }
@@ -61,6 +63,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       minimo: parseBR(f.minimo),
       descricao: f.descricao.trim() || null,
       fotos: fotos.map((x, i) => ({ url: x.url, nome: x.nome, ordem: i })),
+      crlv, // nome do arquivo CRLV-e (guardado na ficha do carro)
     });
   }
 
@@ -88,8 +91,12 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
         </button>
         <label className="flex-1 inline-flex items-center justify-center gap-2 text-[12.5px] font-semibold text-blue bg-blue-soft border border-[#D3E3F2] rounded-lg py-2.5 hover:bg-[#dde9f6] cursor-pointer">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M12 16V4M12 4l-4 4M12 4l4 4" /><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
-          Enviar CRLV-e (PDF)
-          <input type="file" accept="application/pdf" className="hidden" onChange={() => setAviso('Leitura do CRLV-e: integração em breve. Por enquanto, preencha manualmente.')} />
+          {crlv ? 'CRLV-e anexado ✓' : 'Enviar CRLV-e (PDF)'}
+          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => {
+            const file = e.target.files?.[0]; if (!file) return;
+            setCrlv(file.name);
+            setAviso('CRLV-e anexado — será guardado na ficha do carro. (A leitura automática dos campos entra em breve; preencha manualmente por ora.)');
+          }} />
         </label>
       </div>
       {aviso && <div className="text-[12px] text-amber bg-amber-soft rounded-lg px-3 py-2.5 mb-3 -mt-1">{aviso}</div>}

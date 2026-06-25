@@ -5,6 +5,7 @@ import { hojeISO } from '../../lib/format';
 import { demoVeiculos, demoVendas, getEquipeDemo } from './demoData';
 import { desempenhoDemo, computarDesempenho } from './demoDesempenho';
 import { totalPrepDemo } from '../preparacao/demoPrep';
+import { addDoc as addDocFicha } from './demoDocs';
 
 // Camada de dados do Estoque.
 // - Supabase configurado  -> lê/escreve nas tabelas veiculos e vendas (RLS por loja).
@@ -57,7 +58,7 @@ export function useEstoque() {
   );
 
   async function addVeiculo(dados) {
-    const { fotos, ...campos } = dados; // fotos vão para tabela/Storage à parte
+    const { fotos, crlv, ...campos } = dados; // fotos e CRLV vão à parte
     if (demo) {
       const novo = {
         id: globalThis.crypto?.randomUUID?.() || 'demo-' + Date.now(),
@@ -71,6 +72,8 @@ export function useEstoque() {
         ...campos,
       };
       setVeiculos((arr) => [novo, ...arr]);
+      // CRLV-e enviado no cadastro fica guardado na ficha do carro
+      if (crlv && novo.codigo) addDocFicha(novo.codigo, { tipo: 'crlv_e', nome_arquivo: crlv, status: 'anexado' });
       return { error: null };
     }
     const { data, error } = await supabase

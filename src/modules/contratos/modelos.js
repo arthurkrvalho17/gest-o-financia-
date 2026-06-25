@@ -10,7 +10,6 @@ export const MODELOS = {
     grupos: [
       { titulo: 'Qualificação do comprador', campos: [
         T('nacionalidade', 'Nacionalidade'), T('estado_civil', 'Estado civil'),
-        T('profissao', 'Profissão'), T('rg', 'RG / órgão emissor'),
         T('endereco', 'Endereço completo', { full: true }),
       ] },
       // Dados do veículo (RENAVAM, chassi, km, combustível) vêm do cadastro no estoque.
@@ -41,7 +40,7 @@ export const MODELOS = {
     grupos: [
       { titulo: 'Consignante (dono)', campos: [
         T('consignante_nome', 'Nome / razão social', { full: true }),
-        T('consignante_doc', 'CPF / CNPJ'), T('consignante_rg', 'RG / inscrição'),
+        T('consignante_doc', 'CPF / CNPJ'), T('consignante_nascimento', 'Data de nascimento'),
         T('consignante_tel', 'Telefone'),
         T('consignante_endereco', 'Endereço', { full: true }),
       ] },
@@ -60,7 +59,7 @@ export const MODELOS = {
     grupos: [
       { titulo: 'Outorgado', campos: [
         T('outorgado_nome', 'Nome do outorgado', { full: true }),
-        T('outorgado_cpf', 'CPF'), T('outorgado_rg', 'RG'),
+        T('outorgado_cpf', 'CPF'), T('outorgado_nascimento', 'Data de nascimento'),
       ] },
       // Dados do veículo (RENAVAM, chassi) vêm do cadastro no estoque.
       { titulo: 'Mandato', campos: [
