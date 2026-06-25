@@ -32,7 +32,7 @@ ____________________________________
 
   recibo_sinal: `RECIBO DE SINAL (ARRAS)
 
-Recebemos de {{cliente_nome}}, CPF {{cliente_cpf}}, a quantia de {{sinal_recebido}} a título de SINAL para reserva do veículo {{veiculo_modelo}}, placa {{veiculo_placa}}.
+Recebemos de {{cliente_nome}}, CPF {{cliente_cpf}}, residente em {{cliente_endereco}}, a quantia de {{valor_sinal}} a título de SINAL para reserva do veículo {{veiculo_modelo}}, placa {{veiculo_placa}}.
 
 Observações: {{observacoes}}
 
@@ -46,13 +46,13 @@ ____________________________________
   consignacao: `CONTRATO DE CONSIGNAÇÃO DE VEÍCULO
 
 CONSIGNATÁRIA: {{loja_nome}}, CNPJ {{loja_cnpj}}.
-CONSIGNANTE: {{cliente_nome}}, CPF {{cliente_cpf}}, nascido(a) em {{cliente_nascimento}}.
+CONSIGNANTE (empresa): {{consignante_nome}}, CNPJ {{consignante_cnpj}}, telefone {{consignante_tel}}, com endereço em {{consignante_endereco}}.
 
-O(A) CONSIGNANTE entrega à loja, em consignação para venda, o veículo {{veiculo_modelo}}, placa {{veiculo_placa}}, RENAVAM {{veiculo_renavam}}, autorizando o anúncio e a negociação.
+A CONSIGNANTE entrega à loja, em consignação para venda, o veículo {{veiculo_modelo}}, placa {{veiculo_placa}}, RENAVAM {{veiculo_renavam}}, autorizando o anúncio e a negociação.
 
-1. Valor de venda pretendido: {{valor}}.
-2. A loja fica responsável pela intermediação; IPVA, multas e manutenção seguem o pactuado.
-3. O repasse ao(à) consignante e a comissão da loja são os definidos entre as partes.
+1. Valor de venda pretendido: {{valor_pretendido}}.
+2. Repasse à consignante: {{valor_repasse}} · comissão da loja: {{comissao}}.
+3. A loja fica responsável pela intermediação; IPVA, multas e manutenção seguem o pactuado.
 
 {{data}}
 
@@ -60,7 +60,7 @@ ____________________________________
 {{loja_nome}} (Consignatária)
 
 ____________________________________
-{{cliente_nome}} (Consignante)`,
+{{consignante_nome}} (Consignante)`,
 
   test_drive: `TERMO DE RESPONSABILIDADE — TEST DRIVE
 

@@ -113,18 +113,21 @@ export function useFinanceiro() {
     [demo, prepGastos, veiculos, tick] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Adicionar gasto de preparação pelo formulário (mesmo registro da aba Preparação).
-  async function addGastoPrepForm(veic, dados) {
+  // Adicionar gasto(s) de preparação pelo formulário (mesmo registro da aba Preparação).
+  async function addGastoPrepForm(veic, lista) {
+    const itens = Array.isArray(lista) ? lista : [lista];
     if (demo) {
-      addGastoPreparacao(veic.codigo, dados);
+      itens.forEach((d) => addGastoPreparacao(veic.codigo, d));
       setTick((t) => t + 1);
       return { error: null };
     }
-    const { error } = await supabase.from('preparacao_gastos').insert({
-      loja_id: lojaId, veiculo_id: veic.id, descricao: dados.descricao,
-      valor: dados.valor, status: dados.status, observacoes: dados.observacao,
-      data: new Date().toISOString().slice(0, 10),
-    });
+    const hoje = new Date().toISOString().slice(0, 10);
+    const { error } = await supabase.from('preparacao_gastos').insert(
+      itens.map((d) => ({
+        loja_id: lojaId, veiculo_id: veic.id, descricao: d.descricao, valor: d.valor,
+        status: d.status, observacoes: d.observacao, data: hoje,
+      }))
+    );
     if (!error) await carregar();
     return { error };
   }

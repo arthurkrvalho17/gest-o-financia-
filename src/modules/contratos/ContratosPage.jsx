@@ -154,6 +154,19 @@ function Gerador({ ct, tipo, onVoltar }) {
   }, [tipo]);
 
   const veicSel = ct.veiculos.find((v) => v.id === veicId);
+
+  // Consignação: dados do consignante (empresa) vêm preenchidos do cadastro do veículo.
+  useEffect(() => {
+    if (tipo !== 'consignacao' || !veicSel) return;
+    setExtra((p) => ({
+      ...p,
+      consignante_nome: veicSel.consignante_nome || p.consignante_nome || '',
+      consignante_cnpj: veicSel.consignante_cnpj || p.consignante_cnpj || '',
+      consignante_tel: veicSel.consignante_tel || p.consignante_tel || '',
+      consignante_endereco: veicSel.consignante_endereco || p.consignante_endereco || '',
+    }));
+  }, [veicId, tipo]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const veiculoDoc = veicSel
     ? { id: veicSel.id, codigo: veicSel.codigo, modelo: veicSel.modelo, fab_mod: veicSel.fab_mod, placa: veicSel.placa,
         cor: veicSel.cor, renavam: veicSel.renavam, chassi: veicSel.chassi, km: veicSel.km,

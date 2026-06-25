@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { fmt, ddmm, diasDesde } from '../../lib/format';
+import { getIdentidade } from '../../lib/lojaIdentidade';
 
 // Carrega uma imagem (url/blob) como dataURL via canvas. Best-effort: retorna
 // null se falhar (ex.: CORS no Storage real). No real, a geração é server-side.
@@ -22,14 +23,19 @@ function carregarImagem(url) {
 }
 
 function cabecalho(doc, config, titulo) {
-  const M = 48;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-  doc.setTextColor(24, 95, 165);
-  doc.text('FINANCIA', M, 50);
-  const w = doc.getTextWidth('FINANCIA');
-  doc.setTextColor(94, 160, 224); doc.text('+', M + w, 50);
-  doc.setTextColor(120); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-  doc.text(config?.assinatura_nome || 'Hub Automotivo', M, 64);
+  const M = 48, W = doc.internal.pageSize.getWidth();
+  const id = getIdentidade();
+  // Logo/nome da loja em destaque
+  if (id.logoDataUrl) {
+    try { doc.addImage(id.logoDataUrl, 'PNG', M, 28, 130, 42); } catch { /* ignora */ }
+  } else {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(10, 22, 40);
+    doc.text(id.nome || config?.assinatura_nome || 'Minha loja', M, 50);
+  }
+  // "feito com Financia+" pequeno
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('feito com Financia+', W - M, 44, { align: 'right' });
+  // Título do documento
   doc.setTextColor(10, 22, 40); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
   doc.text(titulo, M, 92);
   doc.setTextColor(0);

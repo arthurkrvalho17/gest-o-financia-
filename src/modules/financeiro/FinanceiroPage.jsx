@@ -272,10 +272,11 @@ function PreparacaoMesView({ fin, mes, mesNome, onVoltar }) {
   const itens = fin.gastosPrepDoMes(mes);
   const total = itens.reduce((s, g) => s + (Number(g.valor) || 0), 0);
 
-  async function salvar(veic, dados) {
-    const { error } = await fin.addGastoPrepForm(veic, dados);
+  async function salvar(veic, lista) {
+    const { error } = await fin.addGastoPrepForm(veic, lista);
     setFormOpen(false);
-    toast(error ? 'Erro: ' + error.message : `Gasto de ${veic.modelo} lançado`);
+    const n = Array.isArray(lista) ? lista.length : 1;
+    toast(error ? 'Erro: ' + error.message : `${n} gasto(s) de ${veic.modelo} lançado(s)`);
   }
 
   return (

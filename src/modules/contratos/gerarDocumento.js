@@ -1,14 +1,38 @@
 import { jsPDF } from 'jspdf';
 import { fmt } from '../../lib/format';
+import { getIdentidade } from '../../lib/lojaIdentidade';
+
+// Cabeçalho dos documentos: LOGO/NOME DA LOJA em destaque + "feito com Financia+" pequeno.
+export function cabecalhoLoja(doc, M = 48) {
+  const id = getIdentidade();
+  const W = doc.internal.pageSize.getWidth();
+  if (id.logoDataUrl) {
+    try { doc.addImage(id.logoDataUrl, 'PNG', M, 28, 130, 42); } catch { /* ignora */ }
+  } else {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(10, 22, 40);
+    doc.text(id.nome || 'Minha loja', M, 50);
+    if (id.cnpj) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(130); doc.text(`CNPJ ${id.cnpj}`, M, 63); }
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('feito com Financia+', W - M, 44, { align: 'right' });
+  doc.setTextColor(0);
+  return 84;
+}
 
 // Mesmo motor de template para PDF e DOCX: preenche o {{placeholders}} do modelo
 // (Padrão FINANCIA+ ou Seu modelo) com os dados do cliente/veículo/negociação.
 export function montarDados({ config, cliente, veiculo, extra, dataStr }) {
   const v = veiculo || {};
   const x = extra || {};
+  const din = (k) => (x[k] != null && x[k] !== '' ? fmt(parseFloat(x[k]) || 0) : '—');
   return {
-    ...x, // campos específicos do tipo (ex.: observacoes) viram placeholders
-    sinal_recebido: x.sinal_recebido != null ? fmt(parseFloat(x.sinal_recebido) || 0) : '—',
+    ...x, // campos específicos do tipo (ex.: observacoes, consignante_*) viram placeholders
+    // valores monetários formatados
+    valor_sinal: din('valor_sinal'),
+    valor_pretendido: din('valor_pretendido'),
+    valor_repasse: din('valor_repasse'),
+    comissao: din('comissao'),
+    valor_compra: din('valor_compra'),
     observacoes: x.observacoes || '—',
     loja_nome: config?.assinatura_nome || 'Minha loja',
     loja_cnpj: config?.assinatura_cnpj || '—',
@@ -40,11 +64,8 @@ export function exportarPdf({ conteudo, dados, tipoNome, clienteNome }) {
   const texto = preencher(conteudo, dados);
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const M = 48, W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(24, 95, 165);
-  doc.text('FINANCIA', M, 48);
-  doc.setTextColor(94, 160, 224); doc.text('+', M + doc.getTextWidth('FINANCIA'), 48);
-  doc.setTextColor(0); doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
-  let y = 84;
+  let y = cabecalhoLoja(doc, M);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
   for (const linha of doc.splitTextToSize(texto, W - M * 2)) {
     if (y > H - 50) { doc.addPage(); y = 56; }
     doc.text(linha, M, y); y += 16;

@@ -5,6 +5,7 @@ import { parseBR } from '../../lib/format';
 const VAZIO = {
   codigo: '', modelo: '', fab_mod: '', cor: '', placa: '', renavam: '', chassi: '', km: '',
   combustivel: '', tipo: 'proprio', compra: '', pedido: '', minimo: '', descricao: '',
+  consignante_nome: '', consignante_cnpj: '', consignante_tel: '', consignante_endereco: '',
 };
 
 export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }) {
@@ -62,6 +63,11 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       pedido: parseBR(f.pedido),
       minimo: parseBR(f.minimo),
       descricao: f.descricao.trim() || null,
+      // consignante (empresa dona) — só quando consignado; alimenta a consignação
+      consignante_nome: f.tipo === 'consignado' ? f.consignante_nome.trim() || null : null,
+      consignante_cnpj: f.tipo === 'consignado' ? f.consignante_cnpj.trim() || null : null,
+      consignante_tel: f.tipo === 'consignado' ? f.consignante_tel.trim() || null : null,
+      consignante_endereco: f.tipo === 'consignado' ? f.consignante_endereco.trim() || null : null,
       fotos: fotos.map((x, i) => ({ url: x.url, nome: x.nome, ordem: i })),
       crlv, // nome do arquivo CRLV-e (guardado na ficha do carro)
     });
@@ -126,6 +132,20 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
             className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full resize-y" />
         </F>
       </div>
+
+      {/* Consignante (empresa dona) — só quando consignado; alimenta o contrato de consignação */}
+      {f.tipo === 'consignado' && (
+        <div className="mt-3.5 border border-border rounded-lg p-3.5 bg-[#FAFBFD]">
+          <div className="text-[11.5px] font-bold text-muted uppercase tracking-[.04em] mb-2.5">Consignante (dono — empresa)</div>
+          <div className="grid grid-cols-2 gap-3">
+            <F label="Razão social" full><I v={f.consignante_nome} on={(v) => set('consignante_nome', v)} ph="Empresa proprietária" /></F>
+            <F label="CNPJ"><I v={f.consignante_cnpj} on={(v) => set('consignante_cnpj', v)} ph="00.000.000/0001-00" /></F>
+            <F label="Telefone"><I v={f.consignante_tel} on={(v) => set('consignante_tel', v)} ph="(00) 00000-0000" /></F>
+            <F label="Endereço completo" full><I v={f.consignante_endereco} on={(v) => set('consignante_endereco', v)} ph="Endereço da empresa" /></F>
+          </div>
+          <p className="text-[11px] text-muted-2 mt-2">Esses dados entram automaticamente no contrato de consignação deste carro.</p>
+        </div>
+      )}
 
       {/* Fotos — arraste para reordenar; a primeira é a capa */}
       <div className="mt-3.5">

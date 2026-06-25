@@ -5,6 +5,7 @@ import { brl } from '../../lib/format';
 import { getEquipeDemo, addVendedorDemo, removeVendedorDemo } from '../estoque/demoData';
 import { CANAIS_ANUNCIO, CANAIS_MENSAGERIA } from '../../integracoes/canais';
 import { statusConexao, setStatusConexao } from '../../integracoes/demoIntegr';
+import { getIdentidade, setIdentidade } from '../../lib/lojaIdentidade';
 
 const STATUS_CX = {
   conectado: { label: 'Conectado', cls: 'bg-green-soft text-green', dot: '#15803D' },
@@ -54,8 +55,38 @@ export default function ConfiguracoesPage() {
 
   return (
     <>
-      <Topbar titulo="Configurações" sub="Assinatura, vendedores e conexões da loja" />
+      <Topbar titulo="Configurações" sub="Identidade, assinatura, vendedores e conexões da loja" />
       <div className="px-7 py-6 max-w-[1240px]">
+       {/* Identidade da loja (logo nos documentos) */}
+       <div className="bg-white border border-border rounded-card shadow-card overflow-hidden mb-[18px]">
+         <div className="px-[18px] py-[15px] border-b border-border">
+           <h2 className="text-[14.5px] font-semibold">Identidade da loja</h2>
+           <span className="text-[12px] text-muted-2">aparece em destaque no cabeçalho dos documentos (com "Financia+" pequeno ao lado)</span>
+         </div>
+         <div className="p-[18px] flex items-center gap-5 flex-wrap">
+           <div className="w-[140px] h-[60px] rounded-lg border border-border bg-bg grid place-items-center overflow-hidden flex-shrink-0">
+             {getIdentidade().logoDataUrl
+               ? <img src={getIdentidade().logoDataUrl} alt="logo" className="max-w-full max-h-full object-contain" />
+               : <span className="text-[12px] text-muted-2">sem logo</span>}
+           </div>
+           <div className="flex-1 grid grid-cols-2 gap-3 min-w-[260px]">
+             <label className="flex flex-col gap-1.5"><span className="text-[11.5px] font-semibold text-muted">Nome da loja</span>
+               <input value={getIdentidade().nome} onChange={(e) => { setIdentidade({ nome: e.target.value }); force((n) => n + 1); }} className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue" /></label>
+             <label className="flex flex-col gap-1.5"><span className="text-[11.5px] font-semibold text-muted">CNPJ</span>
+               <input value={getIdentidade().cnpj} onChange={(e) => { setIdentidade({ cnpj: e.target.value }); force((n) => n + 1); }} className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue" /></label>
+           </div>
+           <label className="text-[12.5px] font-semibold text-blue bg-blue-soft border border-[#D3E3F2] rounded-lg px-3.5 py-2.5 cursor-pointer hover:bg-[#dde9f6] self-end">
+             Enviar logo
+             <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+               const file = e.target.files?.[0]; if (!file) return;
+               const reader = new FileReader();
+               reader.onload = () => { setIdentidade({ logoDataUrl: reader.result }); force((n) => n + 1); toast('Logo atualizada'); };
+               reader.readAsDataURL(file);
+             }} />
+           </label>
+         </div>
+       </div>
+
        <div className="grid grid-cols-2 gap-[18px] max-[1000px]:grid-cols-1">
         {/* 3.1 Assinatura / Plano */}
         <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">

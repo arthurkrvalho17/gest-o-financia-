@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos } from '../estoque/demoData';
 import { addDoc as addDocFicha } from '../estoque/demoDocs';
 import { getModeloLoja, conteudoAtivo, conteudoPadrao, salvarEditadoDemo, definirOrigemDemo, voltarPadraoDemo, enviarProprioDemo } from './demoModelos';
+import { getIdentidade } from '../../lib/lojaIdentidade';
 
 const docsDemoSeed = [
   { id: 'd1', tipo: 'compra_venda', cliente_nome: 'Sandra Mello', titulo: 'Honda Civic Touring · Sandra Mello', criado_em: '2026-06-08', assinatura_status: 'assinado', veiculo_codigo: '8147112' },
@@ -24,7 +25,8 @@ export function useContratos() {
 
   const carregar = useCallback(async () => {
     if (demo) {
-      setConfig({ assinatura_nome: 'Auto Mendes Veículos', assinatura_cnpj: '00.000.000/0001-00' });
+      const id = getIdentidade();
+      setConfig({ assinatura_nome: id.nome, assinatura_cnpj: id.cnpj });
       setVeiculos(demoVeiculos());
       setDocumentos(docsDemoSeed.map((d) => ({ ...d })));
       setLoading(false);

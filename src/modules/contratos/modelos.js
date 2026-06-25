@@ -26,8 +26,11 @@ export const MODELOS = {
     desc: 'Entrada / reserva do veículo',
     notaLegal: 'Sinal = arras (arts. 417–420 do Código Civil): se o cliente desiste, perde o sinal; se a loja desiste, devolve em dobro.',
     grupos: [
+      { titulo: 'Dados do cliente', campos: [
+        T('endereco', 'Endereço completo', { full: true }),
+      ] },
       { titulo: 'Valores', campos: [
-        T('sinal_recebido', 'Valor do sinal recebido', { dinheiro: true }),
+        T('valor_sinal', 'Valor do sinal recebido', { dinheiro: true }),
         T('observacoes', 'Observações', { textarea: true, full: true }),
       ] },
     ],
@@ -36,11 +39,11 @@ export const MODELOS = {
     nome: 'Contrato de consignação',
     desc: 'Carro de terceiro à venda na loja',
     grupos: [
-      { titulo: 'Consignante (dono)', campos: [
-        T('consignante_nome', 'Nome / razão social', { full: true }),
-        T('consignante_doc', 'CPF / CNPJ'), T('consignante_nascimento', 'Data de nascimento'),
-        T('consignante_tel', 'Telefone'),
-        T('consignante_endereco', 'Endereço', { full: true }),
+      // O consignante (empresa) vem preenchido do cadastro do veículo consignado.
+      { titulo: 'Consignante (dono — empresa)', campos: [
+        T('consignante_nome', 'Razão social', { full: true }),
+        T('consignante_cnpj', 'CNPJ'), T('consignante_tel', 'Telefone'),
+        T('consignante_endereco', 'Endereço completo', { full: true }),
       ] },
       { titulo: 'Termos', campos: [
         T('valor_pretendido', 'Valor de venda pretendido', { dinheiro: true }),
@@ -80,28 +83,14 @@ export const MODELOS = {
       ] },
     ],
   },
-  nota_entrada: {
-    nome: 'Nota de entrada',
-    desc: 'Compra de carro de particular',
-    grupos: [
-      { titulo: 'Vendedor (particular)', campos: [
-        T('vendedor_nome', 'Nome', { full: true }),
-        T('vendedor_cpf', 'CPF'), T('vendedor_rg', 'RG'),
-        T('vendedor_tel', 'Telefone'),
-        T('vendedor_endereco', 'Endereço', { full: true }),
-      ] },
-      { titulo: 'Compra', campos: [
-        T('valor_compra', 'Valor de compra', { dinheiro: true }),
-        T('forma_pagamento', 'Forma de pagamento'),
-        T('data_entrada', 'Data de entrada'),
-      ] },
-    ],
-  },
 };
 
 export const ORDEM_MODELOS = [
-  'compra_venda', 'recibo_sinal', 'consignacao', 'procuracao', 'test_drive', 'nota_entrada',
+  'compra_venda', 'recibo_sinal', 'consignacao', 'procuracao', 'test_drive',
 ];
+
+// Campos do consignante que vêm do cadastro do veículo consignado (autofill).
+export const CAMPOS_CONSIGNANTE = ['consignante_nome', 'consignante_cnpj', 'consignante_tel', 'consignante_endereco'];
 
 // Todos os campos extras achatados (para o formulário e valores padrão).
 export function camposExtra(tipo) {

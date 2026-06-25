@@ -18,10 +18,11 @@ export default function PreparacaoPage() {
 
   const abrirForm = (preId = null) => setForm({ open: true, preId });
   const fecharForm = () => setForm({ open: false, preId: null });
-  async function salvarGasto(veic, dados) {
-    const { error } = await prep.addGastoForm(veic, dados);
+  async function salvarGasto(veic, lista) {
+    const { error } = await prep.addGastoForm(veic, lista);
     fecharForm();
-    toast(error ? 'Erro: ' + error.message : `Gasto adicionado em ${veic.modelo}`);
+    const n = Array.isArray(lista) ? lista.length : 1;
+    toast(error ? 'Erro: ' + error.message : `${n} gasto(s) em ${veic.modelo}`);
   }
 
   const formEl = (
