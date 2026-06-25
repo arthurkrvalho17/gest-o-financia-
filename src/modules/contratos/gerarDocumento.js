@@ -7,6 +7,9 @@ export function montarDados({ config, cliente, veiculo, extra, dataStr }) {
   const v = veiculo || {};
   const x = extra || {};
   return {
+    ...x, // campos específicos do tipo (ex.: observacoes) viram placeholders
+    sinal_recebido: x.sinal_recebido != null ? fmt(parseFloat(x.sinal_recebido) || 0) : '—',
+    observacoes: x.observacoes || '—',
     loja_nome: config?.assinatura_nome || 'Minha loja',
     loja_cnpj: config?.assinatura_cnpj || '—',
     data: dataStr,

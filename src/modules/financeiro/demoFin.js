@@ -86,6 +86,22 @@ export const mesesPassados = [
   { mes: '2026-03', nome: 'Março', faturamento: 241000, lucroVendidos: 22400 + 11900 + 1700, vendas: 8, preparacao: 6200, carros: [['HB20 Sense', 6100], ['Gol 1.0', 4300], ['Onix LT', 5500]] },
 ];
 
+// Virada de mês: Preparação e Outras começam vazias no mês novo (não são
+// transportadas); Despesas fixas são RECRIADAS do último mês com fixas, como
+// pendentes (recorrência). O histórico dos meses anteriores nunca é apagado.
+export function recriarFixasSeVazio(mesKey) {
+  if (!despesasStore[mesKey]) despesasStore[mesKey] = { fixas: [], outras: [] };
+  if (despesasStore[mesKey].fixas.length > 0) return;
+  const anteriores = Object.keys(despesasStore)
+    .filter((m) => m < mesKey && despesasStore[m].fixas?.length)
+    .sort();
+  const ultimo = anteriores[anteriores.length - 1];
+  if (!ultimo) return;
+  despesasStore[mesKey].fixas = despesasStore[ultimo].fixas.map((d) => ({
+    ...d, id: uid(), status: 'pendente', data_pgto: '',
+  }));
+}
+
 export function despesasDemo(mesKey, categoria) {
   if (!despesasStore[mesKey]) despesasStore[mesKey] = { fixas: [], outras: [] };
   const cat = categoria === 'fixa' ? 'fixas' : 'outras';

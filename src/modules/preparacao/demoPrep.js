@@ -57,6 +57,12 @@ export function totalPrepDemo(codigo) {
   return gastosDemo(codigo).reduce((s, x) => s + (Number(x.valor) || 0), 0);
 }
 
+export function setStatusGastoDemo(codigo, id, status) {
+  const arr = gastosDemo(codigo);
+  const g = arr.find((x) => x.id === id);
+  if (g) g.status = status;
+}
+
 export function novoGastoDemo() {
   return g('', '', '', 0, 'pendente');
 }

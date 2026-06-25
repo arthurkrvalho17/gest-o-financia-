@@ -27,10 +27,8 @@ export const MODELOS = {
     notaLegal: 'Sinal = arras (arts. 417–420 do Código Civil): se o cliente desiste, perde o sinal; se a loja desiste, devolve em dobro.',
     grupos: [
       { titulo: 'Valores', campos: [
-        T('valor_total', 'Valor total', { dinheiro: true }),
-        T('sinal_recebido', 'Sinal recebido', { dinheiro: true }),
-        T('saldo_restante', 'Saldo restante', { dinheiro: true }),
-        T('condicao_saldo', 'Condição de pagamento do saldo', { full: true }),
+        T('sinal_recebido', 'Valor do sinal recebido', { dinheiro: true }),
+        T('observacoes', 'Observações', { textarea: true, full: true }),
       ] },
     ],
   },

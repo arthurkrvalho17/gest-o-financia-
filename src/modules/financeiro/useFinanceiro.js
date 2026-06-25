@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos, demoVendas } from '../estoque/demoData';
-import { totalPrepDemo, allGastosDemo, gastosDemo, addGastoPreparacao } from '../preparacao/demoPrep';
-import { despesasDemo, setDespesasDemo, novaDespesaDemo } from './demoFin';
+import { totalPrepDemo, allGastosDemo, gastosDemo, addGastoPreparacao, setStatusGastoDemo } from '../preparacao/demoPrep';
+import { despesasDemo, setDespesasDemo, novaDespesaDemo, recriarFixasSeVazio } from './demoFin';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
 
@@ -22,6 +22,7 @@ export function useFinanceiro() {
 
   const carregar = useCallback(async () => {
     if (demo) {
+      recriarFixasSeVazio(MES_ATUAL); // virada de mês: recria as fixas como pendentes
       setVeiculos(demoVeiculos());
       setVendas(demoVendas());
       setLoading(false);
@@ -175,10 +176,35 @@ export function useFinanceiro() {
     return { error };
   }
 
+  // ---- Contas a pagar: visão filtrada (status pendente) do mês, sem duplicar dado ----
+  const contasAPagar = useCallback(
+    (mes) => {
+      const pend = (arr) => arr.filter((x) => x.status !== 'pago');
+      const itens = [
+        ...pend(despesasDe(mes, 'fixa')).map((x) => ({ ...x, categoria: 'Despesas fixas', fonte: 'fixa' })),
+        ...pend(despesasDe(mes, 'outra')).map((x) => ({ ...x, categoria: 'Outras despesas', fonte: 'outra' })),
+        ...gastosPrepDoMes(mes).filter((g) => g.status !== 'pago').map((g) => ({ ...g, descricao: `${g.descricao} (${g.carro})`, categoria: 'Preparação dos carros', fonte: 'prep' })),
+      ];
+      return itens;
+    },
+    [despesasDe, gastosPrepDoMes]
+  );
+
+  async function marcarPago(item, mes) {
+    if (item.fonte === 'prep') {
+      if (demo) { setStatusGastoDemo(item.codigo, item.id, 'pago'); setTick((t) => t + 1); return { error: null }; }
+      const { error } = await supabase.from('preparacao_gastos').update({ status: 'pago' }).eq('id', item.id);
+      if (!error) await carregar();
+      return { error };
+    }
+    return updateDespesa(mes, item.fonte, item, { status: 'pago' });
+  }
+
   return {
     demo, loading,
     custosDe, vendasDoMes, faturamentoDoMes, lucroPorCarroDoMes, preparacaoDoMes, gastosPrepDe,
     gastosPrepDoMes, addGastoPrepForm, veiculos,
     despesasDe, totalDespesas, addDespesa, updateDespesa, delDespesa,
+    contasAPagar, marcarPago,
   };
 }

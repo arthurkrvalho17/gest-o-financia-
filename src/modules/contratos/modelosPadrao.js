@@ -32,7 +32,9 @@ ____________________________________
 
   recibo_sinal: `RECIBO DE SINAL (ARRAS)
 
-Recebemos de {{cliente_nome}}, CPF {{cliente_cpf}}, a quantia correspondente ao SINAL para reserva do veículo {{veiculo_modelo}}, placa {{veiculo_placa}}, no valor total de {{valor}}.
+Recebemos de {{cliente_nome}}, CPF {{cliente_cpf}}, a quantia de {{sinal_recebido}} a título de SINAL para reserva do veículo {{veiculo_modelo}}, placa {{veiculo_placa}}.
+
+Observações: {{observacoes}}
 
 O sinal é regido pelos arts. 417 a 420 do Código Civil: se o(a) comprador(a) desistir, perde o sinal; se a loja desistir, devolve-o em dobro. O valor do sinal será abatido do preço final no ato da compra.
 
