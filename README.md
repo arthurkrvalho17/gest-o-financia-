@@ -306,8 +306,14 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
   aparece nas duas telas e não é descontado duas vezes no resultado.
 - **Lucro por carro vendido** — clicável, abre o detalhe da conta (comprei por X, preparação item
   a item, vendi por Y, fórmula) + resultado da loja no mês.
+- **Contas a pagar**: visão filtrada (status pendente) do mês — todos os pendentes das 3 categorias
+  (fixas + preparação + outras) com categoria, valor e total; "Marcar pago" tira da lista. Mesma
+  fonte das planilhas (não duplica dado).
 - **Histórico mês a mês** clicável; cada mês abre com as mesmas planilhas **editáveis** (correção
   contábil). Métricas calculadas por query.
+- **Virada de mês**: Preparação e Outras começam vazias no mês novo (não são transportadas);
+  **Despesas fixas são recriadas** como pendentes (recorrência). O histórico dos meses anteriores
+  nunca é apagado.
 
 ### CRM ([`src/modules/crm`](src/modules/crm))
 - **3 KPIs** (leads do mês, conversão, negócios em aberto).
@@ -334,6 +340,8 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
 - **Histórico**: atalho que abre todos os documentos gerados, agrupados por tipo, com busca por
   cliente/carro/tipo/data (mesma fonte da ficha do carro).
 - **CRLV-e**: enviado no cadastro do veículo, fica guardado na ficha do carro.
+- **Documentos clicáveis** na ficha do carro: clicar abre a visualização (PDF/imagem no real;
+  conteúdo nos gerados pelo sistema); remover é separado do clique.
 
 ---
 
