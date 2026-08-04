@@ -41,30 +41,62 @@ async function buscarLoja(lojaId) {
     .maybeSingle();
   return {
     cep: data?.cep?.replace(/\D/g, '') || '',
-    telefone: Number(data?.telefone?.replace(/\D/g, '') || 0) || undefined,
+    telefone: data?.telefone?.replace(/\D/g, '') || '',
   };
 }
 
-function montarAdBody(anuncio, idExterno, cep, telefone) {
-  const id = idExterno || anuncio.codigo || anuncio.veiculo_id.replace(/-/g, '').slice(0, 19);
-  const fotos = (anuncio.fotos || []).map((f) => f.url || f).filter(Boolean).slice(0, 20);
+// Validações ANTES de chamar a API: os erros da OLX são genéricos (NO_REGION,
+// statusCode -4...); aqui o lojista recebe a causa real e onde corrigir.
+export function montarAdBody(anuncio, idExterno, cep, telefone) {
+  // Phone é obrigatório: inteiro de 10–11 dígitos (DDD + número, sem máscara)
+  if (!/^\d{10,11}$/.test(telefone)) {
+    throw new Error('Cadastre o telefone da loja em Configurações > Identidade da loja (DDD + número).');
+  }
 
-  const ad = {
+  // zipcode obrigatório — sem ele a OLX rejeita com NO_REGION
+  if (!/^\d{8}$/.test(cep)) {
+    throw new Error('Cadastre o CEP da loja em Configurações > Identidade da loja — a OLX exige o CEP para posicionar o anúncio.');
+  }
+
+  // images é obrigatório (desde 05/08/2025); a OLX rejeita URLs repetidas
+  const fotos = [...new Set((anuncio.fotos || []).map((f) => f.url || f).filter(Boolean))].slice(0, 20);
+  if (!fotos.length) {
+    throw new Error('O anúncio precisa de pelo menos 1 foto — adicione fotos ao veículo antes de publicar na OLX.');
+  }
+
+  // price: inteiro, sem centavos
+  const price = Math.round(anuncio.preco || 0);
+  if (price <= 0) {
+    throw new Error('Informe o valor pedido do veículo antes de publicar na OLX.');
+  }
+
+  // Body: 2 a 6000 caracteres
+  const body = (anuncio.descricao || '').trim();
+  if (body.length < 2 || body.length > 6000) {
+    throw new Error('A descrição do anúncio precisa ter entre 2 e 6000 caracteres — ajuste a descrição do veículo.');
+  }
+
+  // id aceito pela OLX: [A-Za-z0-9_{}-]{1,19}
+  const id = (idExterno || anuncio.codigo || anuncio.veiculo_id.replace(/-/g, ''))
+    .replace(/[^A-Za-z0-9_{}-]/g, '')
+    .slice(0, 19);
+  if (!id) throw new Error('Veículo sem código utilizável como id do anúncio OLX.');
+
+  return {
     id,
     operation: 'insert', // insert cria E edita (mesmo id); delete despublica
     category: CATEGORIA_CARROS,
+    // Para a categoria 2020 (autos) a OLX SOBRESCREVE o Subject com o valor do
+    // Catálogo de Autos (nota da doc de importação) — enviamos mesmo assim.
     Subject: anuncio.titulo,
-    Body: anuncio.descricao,
+    Body: body,
     type: 's',
-    price: Math.round(anuncio.preco),
+    price,
     zipcode: cep,
     images: fotos,
+    Phone: Number(telefone),
     params: mapearParams(anuncio),
   };
-
-  if (telefone) ad.Phone = telefone;
-
-  return ad;
 }
 
 function conferirResposta(json) {
