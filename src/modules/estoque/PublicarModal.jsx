@@ -1,20 +1,32 @@
 import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import { CANAIS_ANUNCIO } from '../../integracoes/canais';
-import { statusConexao, getPublicacoes, setPublicacao, removerPublicacao } from '../../integracoes/demoIntegr';
-import { getConector } from '../../integracoes/conectores';
 import { montarAnuncio } from '../../integracoes/anuncioCanonico';
+import { canaisConectados, getPublicacoesDe, publicarEmCanal, despublicarDeCanal, atualizarStatusDe } from '../../integracoes/publicacoes';
+import { useAuth } from '../../auth/AuthContext';
 
 // "Publicar em / status por canal" — a UI que fica em cima da camada de conectores.
-// O fluxo (enfileira → conector publica → grava link+status) é o mesmo que rodará
-// com os conectores reais; aqui o conector é mock.
+// Fluxo (ADR-09): enfileira → conector publica → grava link+status. Demo usa
+// stores em memória; real usa canal_credencial + anuncio_publicacao.
 export default function PublicarModal({ open, veiculo, config, onClose, onToast }) {
+  const { demo, loja } = useAuth();
   const [pubs, setPubs] = useState({});
+  const [conexoes, setConexoes] = useState({});
   const [emCurso, setEmCurso] = useState({}); // canal -> true enquanto publica
 
   useEffect(() => {
-    if (open && veiculo) setPubs({ ...getPublicacoes(veiculo.codigo) });
-  }, [open, veiculo]);
+    if (!open || !veiculo) return;
+    canaisConectados({ demo, lojaId: loja?.id }).then(setConexoes);
+    getPublicacoesDe({ demo, veiculo }).then(async (mapa) => {
+      setPubs(mapa);
+      // Canais com moderação assíncrona: reconsulta o desfecho ao abrir
+      for (const [canal, pub] of Object.entries(mapa)) {
+        if (pub?.status !== 'processando') continue;
+        const novo = await atualizarStatusDe({ demo, lojaId: loja?.id, veiculo, canal, pub });
+        setPubs((p) => ({ ...p, [canal]: novo }));
+      }
+    });
+  }, [open, veiculo, demo, loja?.id]);
 
   if (!veiculo) return null;
   const anuncio = montarAnuncio(veiculo, config);
@@ -22,18 +34,24 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
   async function publicar(canal, nome) {
     setEmCurso((e) => ({ ...e, [canal]: true }));
     setPubs((p) => ({ ...p, [canal]: { status: 'pendente' } }));
-    const res = await getConector(canal).publicar(anuncio);
+    const res = await publicarEmCanal({ demo, lojaId: loja?.id, veiculo, config, canal });
     const dados = res.ok
-      ? { status: 'publicado', link_externo: res.link_externo, id_externo: res.id_externo }
+      ? { status: res.status || 'publicado', link_externo: res.link_externo }
       : { status: 'erro', mensagem_erro: res.erro };
-    setPublicacao(veiculo.codigo, canal, dados);
     setPubs((p) => ({ ...p, [canal]: dados }));
     setEmCurso((e) => ({ ...e, [canal]: false }));
-    onToast?.(res.ok ? `Publicado no ${nome}` : `Erro ao publicar no ${nome}`);
+    onToast?.(
+      !res.ok ? `Erro ao publicar no ${nome}: ${res.erro || ''}`
+      : dados.status === 'processando' ? `Enviado ao ${nome} — em análise no portal`
+      : `Publicado no ${nome}`,
+    );
+  }
+  async function reconsultar(canal) {
+    const novo = await atualizarStatusDe({ demo, lojaId: loja?.id, veiculo, canal, pub: pubs[canal] });
+    setPubs((p) => ({ ...p, [canal]: novo }));
   }
   async function despublicar(canal, nome) {
-    await getConector(canal).despublicar(pubs[canal]);
-    removerPublicacao(veiculo.codigo, canal);
+    await despublicarDeCanal({ demo, lojaId: loja?.id, veiculo, canal, pub: pubs[canal] });
     setPubs((p) => { const n = { ...p }; delete n[canal]; return n; });
     onToast?.(`Despublicado do ${nome}`);
   }
@@ -46,7 +64,7 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
       </div>
       <div className="rounded-lg border border-border overflow-hidden">
         {CANAIS_ANUNCIO.map((c) => {
-          const conectado = statusConexao(c.chave) === 'conectado';
+          const conectado = !!conexoes[c.chave];
           const pub = pubs[c.chave];
           const carregando = emCurso[c.chave];
           return (
@@ -56,10 +74,19 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
                 <div className="font-semibold text-[13px]">{c.nome}</div>
                 {pub?.status === 'publicado' && pub.link_externo
                   ? <a href={pub.link_externo} target="_blank" rel="noreferrer" className="text-[11.5px] text-blue hover:underline truncate block">{pub.link_externo}</a>
+                  : pub?.status === 'processando'
+                  ? <div className="text-[11px] text-muted-2">Enviado — aguardando a moderação do portal (o link aparece quando o anúncio for aceito)</div>
+                  : pub?.status === 'erro' && pub.mensagem_erro
+                  ? <div className="text-[11px] text-red truncate" title={pub.mensagem_erro}>{pub.mensagem_erro}</div>
                   : <div className="text-[11px] text-muted-2">{conectado ? 'Pronto para publicar' : 'Conecte este canal em Conexões'}</div>}
               </div>
               {carregando || pub?.status === 'pendente' ? (
                 <span className="text-[11.5px] font-semibold text-amber bg-amber-soft px-2.5 py-1 rounded-md">Publicando…</span>
+              ) : pub?.status === 'processando' ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11.5px] font-semibold text-amber bg-amber-soft px-2.5 py-1 rounded-md">Em análise</span>
+                  <button onClick={() => reconsultar(c.chave)} className="text-[11.5px] font-semibold text-blue hover:underline">Atualizar</button>
+                </div>
               ) : pub?.status === 'publicado' ? (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-semibold text-green bg-green-soft px-2 py-1 rounded-md">Publicado</span>

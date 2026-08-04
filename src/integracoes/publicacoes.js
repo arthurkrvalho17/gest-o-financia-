@@ -32,12 +32,12 @@ export async function canaisConectados({ demo, lojaId }) {
   return Object.fromEntries((data || []).map((r) => [r.canal, true]));
 }
 
-// → { [canal]: { status, link_externo, id_externo, mensagem_erro } }
+// → { [canal]: { status, link_externo, id_externo, mensagem_erro, token_importacao } }
 export async function getPublicacoesDe({ demo, veiculo }) {
   if (demo) return { ...getPublicacoes(chaveDemo(veiculo)) };
   const { data } = await supabase
     .from('anuncio_publicacao')
-    .select('canal, status, id_externo, link_externo, mensagem_erro')
+    .select('canal, status, id_externo, link_externo, mensagem_erro, token_importacao')
     .eq('veiculo_id', veiculo.id);
   const mapa = {};
   for (const p of data || []) {
@@ -75,6 +75,7 @@ async function salvarResultado({ demo, lojaId, veiculo, canal, dados }) {
       id_externo: dados.id_externo || null,
       link_externo: dados.link_externo || null,
       mensagem_erro: dados.mensagem_erro || null,
+      token_importacao: dados.token_importacao || null,
       atualizado_em: new Date().toISOString(),
     },
     { onConflict: 'veiculo_id,canal' },
@@ -82,7 +83,9 @@ async function salvarResultado({ demo, lojaId, veiculo, canal, dados }) {
 }
 
 // Publica um veículo em um canal e persiste o resultado.
-// → { ok, link_externo?, erro? }
+// → { ok, status?, link_externo?, erro? }
+// Canais com moderação assíncrona (OLX) devolvem status 'processando' + token:
+// a publicação só vira 'publicado' quando consultarStatus confirmar.
 export async function publicarEmCanal({ demo, lojaId, veiculo, config, canal }) {
   const fotos = demo ? veiculo.fotos || [] : await fotosDoVeiculo(veiculo);
   const anuncio = montarAnuncio({ ...veiculo, fotos }, config);
@@ -90,10 +93,35 @@ export async function publicarEmCanal({ demo, lojaId, veiculo, config, canal }) 
   await salvarResultado({ demo, lojaId, veiculo, canal, dados: { status: 'pendente' } });
   const res = await getConector(canal).publicar(anuncio);
   const dados = res.ok
-    ? { status: 'publicado', link_externo: res.link_externo, id_externo: res.id_externo }
+    ? {
+        status: res.status || 'publicado',
+        link_externo: res.link_externo,
+        id_externo: res.id_externo,
+        token_importacao: res.token,
+      }
     : { status: 'erro', mensagem_erro: res.erro };
   await salvarResultado({ demo, lojaId, veiculo, canal, dados });
-  return res.ok ? { ok: true, link_externo: res.link_externo } : { ok: false, erro: res.erro };
+  return res.ok
+    ? { ok: true, status: dados.status, link_externo: res.link_externo }
+    : { ok: false, erro: res.erro };
+}
+
+// Reconsulta o canal (moderação assíncrona) e persiste se o status mudou.
+// → dados atualizados da publicação ({ status, link_externo?, mensagem_erro? })
+export async function atualizarStatusDe({ demo, lojaId, veiculo, canal, pub }) {
+  if (demo || !pub) return pub;
+  const novo = await getConector(canal).consultarStatus({ ...pub, loja_id: lojaId });
+  if (!novo || novo.status === pub.status) return pub;
+  const dados = {
+    status: novo.status,
+    id_externo: pub.id_externo,
+    link_externo: novo.link_externo ?? pub.link_externo,
+    mensagem_erro: novo.mensagem_erro || null,
+    // token cumpriu o papel quando a moderação conclui; some do registro
+    token_importacao: novo.status === 'processando' ? pub.token_importacao : null,
+  };
+  await salvarResultado({ demo, lojaId, veiculo, canal, dados });
+  return dados;
 }
 
 // Remove a publicação de um canal (no real, marca como despublicado).

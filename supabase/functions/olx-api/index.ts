@@ -12,6 +12,8 @@
 // Body esperado:
 //   { acao: 'publicar' | 'atualizar' | 'despublicar', ad: {...} }
 //   { acao: 'catalogo', caminho: [] | [id_marca] | [id_marca, id_modelo] }
+//   { acao: 'status_importacao', token: '<token do import, válido 7 dias>' }
+//   { acao: 'status_publicados', page_token?: '<paginação>' }
 // (loja_id NÃO é aceito do cliente: a loja é sempre a do JWT — evita que um
 // tenant publique/despublique usando credencial de outro.)
 //
@@ -65,11 +67,13 @@ Deno.serve(async (req: Request) => {
   if (!usuario?.loja_id) return json(403, { erro: 'Usuário sem loja vinculada.' });
 
   // 2. Valida a requisição
-  const { acao, ad, caminho } = await req.json().catch(() => ({}));
-  if (!['publicar', 'atualizar', 'despublicar', 'catalogo'].includes(acao)) {
+  const { acao, ad, caminho, token, page_token } = await req.json().catch(() => ({}));
+  const ACOES_IMPORT = ['publicar', 'atualizar', 'despublicar'];
+  const ACOES = [...ACOES_IMPORT, 'catalogo', 'status_importacao', 'status_publicados'];
+  if (!ACOES.includes(acao)) {
     return json(400, { erro: 'Ação não permitida.' });
   }
-  if (acao !== 'catalogo' && (!ad || typeof ad !== 'object' || !ad.id)) {
+  if (ACOES_IMPORT.includes(acao) && (!ad || typeof ad !== 'object' || !ad.id)) {
     return json(400, { erro: 'Anúncio (ad) ausente ou sem id.' });
   }
 
@@ -112,7 +116,33 @@ Deno.serve(async (req: Request) => {
     return json(catRes.status, catBody);
   }
 
-  // 4b. Chama o import da OLX e repassa a resposta.
+  // 4b. Status da importação: POST /autoupload/import/{token} — o token vem
+  // da resposta do import e expira em 7 dias (a OLX devolve 404 depois disso).
+  if (acao === 'status_importacao') {
+    if (!token || !/^[A-Za-z0-9._-]+$/.test(String(token))) {
+      return json(400, { erro: 'Token de importação ausente ou inválido.' });
+    }
+    const stRes = await fetch(`${OLX_IMPORT_URL}/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    const stBody = await stRes.json().catch(() => ({}));
+    return json(stRes.status, stBody);
+  }
+
+  // 4c. Anúncios publicados: GET /autoupload/v1/published (Bearer). Fallback
+  // de consulta quando o token de importação já expirou.
+  if (acao === 'status_publicados') {
+    const qs = page_token ? `?page_token=${encodeURIComponent(String(page_token))}` : '';
+    const pubRes = await fetch(`https://apps.olx.com.br/autoupload/v1/published${qs}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const pubBody = await pubRes.json().catch(() => ({}));
+    return json(pubRes.status, pubBody);
+  }
+
+  // 4d. Chama o import da OLX e repassa a resposta.
   // publicar e atualizar são a MESMA operação na OLX ("insert" cria ou edita
   // pelo id); despublicar manda só { id, operation: 'delete' }.
   const payload = JSON.stringify({
