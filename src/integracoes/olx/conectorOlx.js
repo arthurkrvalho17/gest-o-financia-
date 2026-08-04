@@ -4,6 +4,7 @@
 // Ref: https://developers.olx.com.br/anuncio/api/import.html
 import { supabase } from '../../lib/supabase';
 import { mapearParams } from './mapearCamposOlx';
+import { resolverCatalogoOlx } from './catalogoAutos';
 
 const CATEGORIA_CARROS = 2020;
 
@@ -47,7 +48,9 @@ async function buscarLoja(lojaId) {
 
 // Validações ANTES de chamar a API: os erros da OLX são genéricos (NO_REGION,
 // statusCode -4...); aqui o lojista recebe a causa real e onde corrigir.
-export function montarAdBody(anuncio, idExterno, cep, telefone) {
+// catalogo = { vehicle_brand, vehicle_model, vehicle_version } resolvido pelo
+// Catálogo de Autos (obrigatórios na categoria 2020).
+export function montarAdBody(anuncio, idExterno, cep, telefone, catalogo = {}) {
   // Phone é obrigatório: inteiro de 10–11 dígitos (DDD + número, sem máscara)
   if (!/^\d{10,11}$/.test(telefone)) {
     throw new Error('Cadastre o telefone da loja em Configurações > Identidade da loja (DDD + número).');
@@ -76,6 +79,11 @@ export function montarAdBody(anuncio, idExterno, cep, telefone) {
     throw new Error('A descrição do anúncio precisa ter entre 2 e 6000 caracteres — ajuste a descrição do veículo.');
   }
 
+  // vehicle_tag é obrigatório nos params de autos
+  if (!anuncio.placa) {
+    throw new Error('Cadastre a placa do veículo — a OLX exige a placa no anúncio de autos.');
+  }
+
   // id aceito pela OLX: [A-Za-z0-9_{}-]{1,19}
   const id = (idExterno || anuncio.codigo || anuncio.veiculo_id.replace(/-/g, ''))
     .replace(/[^A-Za-z0-9_{}-]/g, '')
@@ -95,7 +103,7 @@ export function montarAdBody(anuncio, idExterno, cep, telefone) {
     zipcode: cep,
     images: fotos,
     Phone: Number(telefone),
-    params: mapearParams(anuncio),
+    params: { ...mapearParams(anuncio), ...catalogo },
   };
 }
 
@@ -113,8 +121,11 @@ export const conectorOlx = {
 
   async publicar(anuncio) {
     try {
-      const { cep, telefone } = await buscarLoja(anuncio.loja_id);
-      const ad = montarAdBody(anuncio, null, cep, telefone);
+      const [{ cep, telefone }, catalogo] = await Promise.all([
+        buscarLoja(anuncio.loja_id),
+        resolverCatalogoOlx(anuncio),
+      ]);
+      const ad = montarAdBody(anuncio, null, cep, telefone, catalogo);
       conferirResposta(await chamarOlxApi('publicar', ad));
       return {
         ok: true,
@@ -128,8 +139,11 @@ export const conectorOlx = {
 
   async atualizar(anuncio, pub) {
     try {
-      const { cep, telefone } = await buscarLoja(anuncio.loja_id);
-      const ad = montarAdBody(anuncio, pub.id_externo, cep, telefone);
+      const [{ cep, telefone }, catalogo] = await Promise.all([
+        buscarLoja(anuncio.loja_id),
+        resolverCatalogoOlx(anuncio),
+      ]);
+      const ad = montarAdBody(anuncio, pub.id_externo, cep, telefone, catalogo);
       conferirResposta(await chamarOlxApi('atualizar', ad));
       return { ok: true, id_externo: pub.id_externo, link_externo: pub.link_externo };
     } catch (e) {

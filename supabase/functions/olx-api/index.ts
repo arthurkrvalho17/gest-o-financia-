@@ -9,7 +9,9 @@
 //   2. Carrega canal_credencial (olx) da loja
 //   3. Executa a ação contra https://apps.olx.com.br e devolve a resposta
 //
-// Body esperado: { acao: 'publicar' | 'atualizar' | 'despublicar', ad: {...} }
+// Body esperado:
+//   { acao: 'publicar' | 'atualizar' | 'despublicar', ad: {...} }
+//   { acao: 'catalogo', caminho: [] | [id_marca] | [id_marca, id_modelo] }
 // (loja_id NÃO é aceito do cliente: a loja é sempre a do JWT — evita que um
 // tenant publique/despublique usando credencial de outro.)
 //
@@ -22,7 +24,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const OLX_IMPORT_URL = 'https://apps.olx.com.br/autoupload/import';
+const OLX_CAR_INFO_URL = 'https://apps.olx.com.br/autoupload/car_info';
 const MAX_PAYLOAD_BYTES = 1024 * 1024; // limite documentado da OLX: 1MB
+
+// Cache do Catálogo de Autos (marcas/modelos/versões mudam raramente; os IDs
+// foram trocados em 25/09/2025 — TTL de 24h evita servir catálogo velho por
+// muito tempo sem rebater na OLX a cada publicação).
+const CATALOGO_TTL_MS = 24 * 60 * 60 * 1000;
+const cacheCatalogo = new Map<string, { corpo: unknown; expira: number }>();
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -56,11 +65,11 @@ Deno.serve(async (req: Request) => {
   if (!usuario?.loja_id) return json(403, { erro: 'Usuário sem loja vinculada.' });
 
   // 2. Valida a requisição
-  const { acao, ad } = await req.json().catch(() => ({}));
-  if (!['publicar', 'atualizar', 'despublicar'].includes(acao)) {
+  const { acao, ad, caminho } = await req.json().catch(() => ({}));
+  if (!['publicar', 'atualizar', 'despublicar', 'catalogo'].includes(acao)) {
     return json(400, { erro: 'Ação não permitida.' });
   }
-  if (!ad || typeof ad !== 'object' || !ad.id) {
+  if (acao !== 'catalogo' && (!ad || typeof ad !== 'object' || !ad.id)) {
     return json(400, { erro: 'Anúncio (ad) ausente ou sem id.' });
   }
 
@@ -76,11 +85,38 @@ Deno.serve(async (req: Request) => {
     return json(409, { erro: 'OLX não conectada. Conecte em Configurações > Conexões.' });
   }
 
-  // 4. Chama o import da OLX e repassa a resposta.
+  const accessToken = cred.credenciais.access_token;
+
+  // 4a. Catálogo de Autos: POST autenticado em /car_info[/{marca}[/{modelo}]],
+  // resposta { status, data: { "NOME": id } }. Cacheada por 24h — o catálogo é
+  // grande e estável, e cada publicação faria 3 consultas.
+  if (acao === 'catalogo') {
+    const segmentos = Array.isArray(caminho) ? caminho.map(String) : [];
+    if (segmentos.length > 2 || segmentos.some((s) => !/^\d+$/.test(s))) {
+      return json(400, { erro: 'Caminho de catálogo inválido.' });
+    }
+    const url = [OLX_CAR_INFO_URL, ...segmentos].join('/');
+
+    const emCache = cacheCatalogo.get(url);
+    if (emCache && emCache.expira > Date.now()) return json(200, emCache.corpo);
+
+    const catRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    const catBody = await catRes.json().catch(() => ({}));
+    if (catRes.ok && catBody?.status === 'ok') {
+      cacheCatalogo.set(url, { corpo: catBody, expira: Date.now() + CATALOGO_TTL_MS });
+    }
+    return json(catRes.status, catBody);
+  }
+
+  // 4b. Chama o import da OLX e repassa a resposta.
   // publicar e atualizar são a MESMA operação na OLX ("insert" cria ou edita
   // pelo id); despublicar manda só { id, operation: 'delete' }.
   const payload = JSON.stringify({
-    access_token: cred.credenciais.access_token,
+    access_token: accessToken,
     ad_list: [ad],
   });
   if (new TextEncoder().encode(payload).length > MAX_PAYLOAD_BYTES) {
