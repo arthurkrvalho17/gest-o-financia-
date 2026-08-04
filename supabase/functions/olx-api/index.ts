@@ -91,6 +91,19 @@ Deno.serve(async (req: Request) => {
 
   const accessToken = cred.credenciais.access_token;
 
+  // A OLX não fornece refresh_token nem expires_in: o token expira em ~12h e
+  // NÃO existe renovação automática possível — quando a OLX recusar a
+  // autenticação, marcamos a credencial como 'expirado' e o lojista precisa
+  // reconectar (refazer o OAuth) em Configurações > Conexões.
+  const respostaExpirada = async () => {
+    await admin
+      .from('canal_credencial')
+      .update({ status: 'expirado' })
+      .eq('loja_id', usuario.loja_id)
+      .eq('canal', 'olx');
+    return json(409, { erro: 'Conexão OLX expirada — reconecte em Configurações > Conexões.' });
+  };
+
   // 4a. Catálogo de Autos: POST autenticado em /car_info[/{marca}[/{modelo}]],
   // resposta { status, data: { "NOME": id } }. Cacheada por 24h — o catálogo é
   // grande e estável, e cada publicação faria 3 consultas.
@@ -109,6 +122,7 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token: accessToken }),
     });
+    if (catRes.status === 401 || catRes.status === 403) return await respostaExpirada();
     const catBody = await catRes.json().catch(() => ({}));
     if (catRes.ok && catBody?.status === 'ok') {
       cacheCatalogo.set(url, { corpo: catBody, expira: Date.now() + CATALOGO_TTL_MS });
@@ -127,6 +141,7 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token: accessToken }),
     });
+    if (stRes.status === 401 || stRes.status === 403) return await respostaExpirada();
     const stBody = await stRes.json().catch(() => ({}));
     return json(stRes.status, stBody);
   }
@@ -138,6 +153,7 @@ Deno.serve(async (req: Request) => {
     const pubRes = await fetch(`https://apps.olx.com.br/autoupload/v1/published${qs}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (pubRes.status === 401 || pubRes.status === 403) return await respostaExpirada();
     const pubBody = await pubRes.json().catch(() => ({}));
     return json(pubRes.status, pubBody);
   }
@@ -159,6 +175,7 @@ Deno.serve(async (req: Request) => {
     body: payload,
   });
 
+  if (olxRes.status === 401 || olxRes.status === 403) return await respostaExpirada();
   const olxBody = await olxRes.json().catch(() => ({}));
   return json(olxRes.status, olxBody);
 });

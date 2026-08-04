@@ -32,6 +32,19 @@ export async function canaisConectados({ demo, lojaId }) {
   return Object.fromEntries((data || []).map((r) => [r.canal, true]));
 }
 
+// → { [canal]: status } com TODOS os estados (conectado | expirado | ...).
+// Usado onde a diferença importa — ex.: OLX expira o token em ~12h sem
+// refresh, e o lojista precisa ver "expirada — reconecte" em vez de
+// simplesmente "desconectado".
+export async function statusCanais({ demo, lojaId }) {
+  if (demo) return { ...getConexoes() };
+  const { data } = await supabase
+    .from('canal_credencial')
+    .select('canal, status')
+    .eq('loja_id', lojaId);
+  return Object.fromEntries((data || []).map((r) => [r.canal, r.status]));
+}
+
 // → { [canal]: { status, link_externo, id_externo, mensagem_erro, token_importacao } }
 export async function getPublicacoesDe({ demo, veiculo }) {
   if (demo) return { ...getPublicacoes(chaveDemo(veiculo)) };

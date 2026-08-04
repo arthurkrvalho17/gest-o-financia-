@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import { CANAIS_ANUNCIO } from '../../integracoes/canais';
 import { montarAnuncio } from '../../integracoes/anuncioCanonico';
-import { canaisConectados, getPublicacoesDe, publicarEmCanal, despublicarDeCanal, atualizarStatusDe } from '../../integracoes/publicacoes';
+import { statusCanais, getPublicacoesDe, publicarEmCanal, despublicarDeCanal, atualizarStatusDe } from '../../integracoes/publicacoes';
 import { useAuth } from '../../auth/AuthContext';
 
 // "Publicar em / status por canal" — a UI que fica em cima da camada de conectores.
@@ -16,7 +16,7 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
 
   useEffect(() => {
     if (!open || !veiculo) return;
-    canaisConectados({ demo, lojaId: loja?.id }).then(setConexoes);
+    statusCanais({ demo, lojaId: loja?.id }).then(setConexoes);
     getPublicacoesDe({ demo, veiculo }).then(async (mapa) => {
       setPubs(mapa);
       // Canais com moderação assíncrona: reconsulta o desfecho ao abrir
@@ -64,7 +64,8 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
       </div>
       <div className="rounded-lg border border-border overflow-hidden">
         {CANAIS_ANUNCIO.map((c) => {
-          const conectado = !!conexoes[c.chave];
+          const conectado = conexoes[c.chave] === 'conectado';
+          const expirado = conexoes[c.chave] === 'expirado';
           const pub = pubs[c.chave];
           const carregando = emCurso[c.chave];
           return (
@@ -78,6 +79,8 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
                   ? <div className="text-[11px] text-muted-2">Enviado — aguardando a moderação do portal (o link aparece quando o anúncio for aceito)</div>
                   : pub?.status === 'erro' && pub.mensagem_erro
                   ? <div className="text-[11px] text-red truncate" title={pub.mensagem_erro}>{pub.mensagem_erro}</div>
+                  : expirado
+                  ? <div className="text-[11px] text-red">Conexão {c.nome} expirada — reconecte em Configurações &gt; Conexões</div>
                   : <div className="text-[11px] text-muted-2">{conectado ? 'Pronto para publicar' : 'Conecte este canal em Conexões'}</div>}
               </div>
               {carregando || pub?.status === 'pendente' ? (
@@ -96,6 +99,8 @@ export default function PublicarModal({ open, veiculo, config, onClose, onToast 
                 <button onClick={() => publicar(c.chave, c.nome)} className="text-[11.5px] font-semibold text-red border border-red-soft rounded-md px-2.5 py-1">Erro · tentar</button>
               ) : conectado ? (
                 <button onClick={() => publicar(c.chave, c.nome)} className="text-[12px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-md px-3 py-1.5">Publicar</button>
+              ) : expirado ? (
+                <span className="text-[11px] font-semibold text-red bg-red-soft px-2.5 py-1 rounded-md">Expirada</span>
               ) : (
                 <span className="text-[11px] font-semibold text-muted-2 bg-bg px-2.5 py-1 rounded-md">Desconectado</span>
               )}
