@@ -86,6 +86,12 @@ Implementadas em [`src/modules/estoque/useEstoque.js`](src/modules/estoque/useEs
    situação **"repasse"**.
 5. **Permissões valem no front e no back.** Esconder no React não basta — a proteção também
    precisa existir no banco (ver seção 6).
+6. **Estoque interno nunca diverge silenciosamente do estoque legal (RENAVE).** Com a
+   Resolução CONTRAN nº 1.026/2026, entrada, saída e consignação de veículos usados devem ser
+   registradas eletronicamente no RENAVE (via integradora autorizada). Quando a loja estiver
+   habilitada, cada entrada/saída/consignação no sistema gera (ou exige) o registro
+   correspondente, e o status RENAVE fica visível por veículo — o sistema avisa divergências
+   (ex.: vender carro sem entrada registrada) em vez de escondê-las. Ver ADR-16.
 
 ---
 
@@ -167,6 +173,96 @@ documento separado, **apenas guardado**.
 **Por quê:** a assinatura **avançada** (Lei 14.063/2020) é válida e vincula as partes para o
 contrato particular entre loja e cliente; é a auditoria que segura numa disputa. A transferência
 oficial é ato com ente público (gov.br/ICP-Brasil) — não dá para prometer transferência automática.
+**Revisão (jul/2026):** com a obrigatoriedade do RENAVE (ADR-16), a ATPV-e de entrada/saída passa
+a ser emitida **dentro do fluxo eletrônico** via integradora — a premissa "ATPV-e apenas guardada"
+vale até o conector RENAVE entrar; depois, o sistema passa a intermediar a movimentação legal.
+
+### ADR-15 — Nota fiscal anexável em **qualquer despesa**, no Storage por loja
+**Decisão:** toda despesa (fixa, outra e gasto de preparação) aceita anexar a **nota fiscal**
+(JPG/PNG ou PDF), opcional. O arquivo vai ao **Supabase Storage** (bucket privado
+`notas-fiscais`, caminho `<loja_id>/...`, RLS por loja); o lançamento guarda `nota_fiscal_url` +
+`nota_fiscal_tipo`. UI por uma célula reutilizável ([`NotaFiscalCell`](src/components/NotaFiscalCell.jsx)):
+sem anexo → "Anexar"; com anexo → "Ver NF" (imagem em `<img>`, PDF em `<iframe>`).
+**Por quê:** comprova o gasto/pagamento junto do lançamento. Como a preparação é **fonte única**
+(mesmo registro na Preparação e no Financeiro), a nota segue o lançamento onde ele aparecer. No
+demo o arquivo é uma dataURL no próprio registro; no real, upload + URL assinada (migration 0012).
+
+### ADR-13 — Demo com **store mutável** = fonte única entre módulos
+**Decisão:** os dados demo (`veiculos`, `vendas`) vivem em stores mutáveis de módulo em
+[`demoData.js`](src/modules/estoque/demoData.js) (`addVendaDemo`, `addVeiculoDemo`,
+`updateVeiculoDemo`). Registrar uma venda no Estoque grava nesse store, então o Financeiro e o
+CRM (hooks independentes) leem a **mesma** venda/situação.
+**Por quê:** antes cada hook só atualizava o próprio estado React, então uma venda registrada no
+Estoque não aparecia no Financeiro (faturamento/lucro não atualizavam). O store de módulo replica,
+no demo, o papel que o Postgres tem no modo real: uma fonte única que todos os módulos consultam.
+
+### ADR-14 — Procuração e compra e venda usam os **modelos reais da loja**
+**Decisão:** o padrão FINANCIA+ desses dois documentos é o **texto real digitalizado** da loja
+([`modelosPadrao.js`](src/modules/contratos/modelosPadrao.js)), reproduzido fielmente; só os dados
+específicos (cliente, veículo, partes, negociação) são campos `{{...}}` preenchidos do cadastro.
+**Por quê:** o lojista quer o **seu** contrato, não um genérico. O motor de template
+([`gerarDocumento.js`](src/modules/contratos/gerarDocumento.js)) injeta os dados sem reescrever o
+texto; o lojista ainda pode editar e salvar "seu modelo" por cima (ADR-08), preservando o padrão.
+
+### ADR-12 — Métricas do CRM medem **origem do lead**, não estoque do funil
+**Decisão:** o 3º KPI do CRM e a última coluna do histórico mês a mês deixaram de mostrar
+"Negócios em aberto" e "Ticket médio" e passaram a mostrar **"Canal que mais vendeu"** — a
+`origem_lead` com mais vendas no período (mês corrente no KPI; cada mês no histórico).
+**Por quê:** "negócios em aberto" é uma foto do funil agora (já visível no kanban) e o ticket
+médio já aparece no Financeiro; o que faltava era saber **de onde vêm as vendas** para a loja
+decidir onde investir em anúncios. A métrica sai direto de `vendas.origem_lead`, sem dado novo.
+
+### ADR-16 — RENAVE como conector obrigatório do **estoque legal** — *previsto*
+**Decisão:** o registro eletrônico de entrada, saída e consignação no RENAVE entra como **mais um
+conector** da camada de integrações (ADR-09), via **integradora autorizada pela SENATRAN** —
+escolhida a **Renave Fácil** (API RESTful sobre o Renave-WS/SERPRO; autenticação por certificado
+digital; ambiente de homologação disponível) — com
+interface própria (`registrarEntrada / registrarSaida / registrarConsignacao / consultarStatus`).
+Estado por veículo×evento numa tabela `renave_registro` + fila assíncrona (mesmo padrão de
+`anuncio_publicacao`/`publicacao_job`); chamadas autenticadas por Edge Function (padrão `ml-api`);
+webhooks caem em `integracao_evento`. A habilitação (e-CNPJ/certificado digital) é **da loja**
+(princípio nº 2) — o Financia+ orquestra. No demo, conector mock. Com RENAVE ativo, RENAVAM e
+chassi passam a ser obrigatórios no cadastro do veículo.
+**Por quê:** a Resolução CONTRAN nº 1.026, de 26/06/2026, tornou o RENAVE o **único meio admitido**
+de registro de estoque de veículos (novos, usados e consignados), com prazo de adaptação de 90 dias
+(~set/2026). Sem o registro, o veículo não pode ser emplacado, transferido nem licenciado, e bancos
+não liberam financiamento. A consignação passa a exigir **contrato eletrônico registrado no próprio
+RENAVE com assinatura digital** — o modelo de consignação do sistema (ADR-14) continua como espelho
+comercial, mas **não substitui** o registro legal. RENAVE é requisito de operação do lojista, não
+diferencial: precisa entrar sem refatorar o núcleo — exatamente o que a camada de conectores permite.
+
+### ADR-17 — Emissão de NF-e via Spedy, Financia+ como empresa **Owner** — *previsto*
+**Decisão:** o `complemento_nf` (já previsto em `loja_plano`, sem spec até aqui) passa a significar
+**emissão real de NF-e** ao registrar a venda de um veículo — via **Spedy** (`POST
+/v1/product-invoices`, modo completo, não o modo simplificado `/orders`, porque a tributação de
+veículo usado varia por operação — CFOP `5502`/`6502`, redução de base de ICMS por convênio
+estadual). O Financia+ mantém uma conta **Owner** na Spedy e, ao habilitar o complemento, cria a
+sub-empresa da loja por `POST /v1/companies` (dados do próprio cadastro da loja) — **nenhuma loja
+cria conta em portal nenhum**; só envia o certificado digital A1 quando for ativar. A chave da
+sub-empresa fica em `canal_credencial` (canal `spedy`). Emissão é **automática** ao registrar a
+venda no Estoque (decisão do lojista: velocidade sobre revisão manual); status e eventuais
+rejeições ficam visíveis na venda (Financeiro) via webhook (`invoice.status_changed` →
+`integracao_evento`, canal `spedy`) atualizando `nota_fiscal`.
+**Por quê:** o modelo Owner→sub-empresas da Spedy foi desenhado para plataformas que administram
+múltiplos CNPJs (o próprio caso de uso "contabilidades gerenciando múltiplos CNPJs" da doc da
+Spedy) — evita repetir, pela terceira vez (depois de Webmotors e Usadosbr), o atrito de cada loja
+se cadastrar manualmente num portal externo. O CNPJ/identidade fiscal emitida continua sendo o da
+loja (não do Financia+) — Owner aqui é só o relacionamento de API, não a titularidade fiscal.
+**Pendência que não é nossa para decidir:** os códigos tributários exatos (CFOP, CST, percentual de
+redução de base do ICMS para veículo usado) variam por estado e **precisam ser confirmados com o
+contador de cada loja** — o sistema guarda esses valores como configuração, nunca hardcoded.
+
+### ADR-18 — Fotos de anúncio saem por **URL assinada de longa duração** (30 dias)
+**Decisão:** ao montar o anúncio canônico, as fotos do veículo (bucket privado
+`fotos-veiculos`, ADR-15/migration `0014`) viram **URLs assinadas de 30 dias**, renovadas a cada
+publicar/atualizar ([`storage.js`](src/lib/storage.js) → `TTL_ANUNCIO`). Não foi criado bucket
+público.
+**Por quê:** os portais **baixam** as imagens pela URL depois do publish — a OLX tem moderação
+assíncrona e re-baixa as fotos em edições/re-análises; com o TTL anterior (24h) o anúncio caía em
+`NO_IMAGE`. A URL assinada longa mantém o bucket privado e o RLS intactos: a exposição fica
+limitada a links não-adivinháveis e com expiração, para fotos que o lojista **já decidiu tornar
+públicas** ao anunciar. Isso flexibiliza a postura de privacidade do Storage descrita no ADR-15
+apenas para as fotos de anúncio — notas fiscais e documentos continuam com TTL curto.
 
 ---
 
@@ -176,9 +272,11 @@ Postgres no Supabase. **Toda** tabela de dados tem `loja_id` e RLS por loja. Mig
 em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 [`supabase/setup.sql`](supabase/setup.sql)).
 
-**Fundação** (`0000`)
+**Fundação** (`0000`, `0018`)
 - `lojas` — tenants. `usuarios` — `id = auth.users.id`, `loja_id`, `papel` (dono|funcionario).
 - `loja_do_usuario()` — função que resolve a loja do usuário logado. Trigger `handle_new_user()`.
+- `lojas` (`0018`) ganha campos fiscais exigidos pela Spedy (ADR-17): `numero` (do endereço),
+  `cidade_ibge`, `inscricao_estadual`, `regime_tributario`, `cnae_principal`.
 
 **Estoque** (`0001`, `0006`, `0008`)
 - `veiculos` — `codigo, modelo, fab_mod, cor, placa, renavam, chassi, km, combustivel,
@@ -192,14 +290,22 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 - `contrato_modelo` (`0009`) — modelo da loja por tipo (`origem padrao|editado|enviado, conteudo,
   arquivo_url`). O padrão é do sistema; aqui ficam só as versões da loja.
 
-**Preparação** (`0002`)
+**Preparação** (`0002`, `0012`)
 - `preparacao_gastos` — `veiculo_id, descricao, data, forma_pgto, valor, status (pago|pendente),
-  observacoes`. Soma por veículo = custo de preparação (fonte única).
+  observacoes, nota_fiscal_url, nota_fiscal_tipo`. Soma por veículo = custo de preparação (fonte única).
 
-**Financeiro** (`0003`)
+**Financeiro** (`0003`, `0012`)
 - `despesas` — `categoria (fixa|outra), mes_ref, descricao, vencimento, valor, status, data_pgto,
-  observacoes, lembrete_*`. A "preparação dos carros" **não** é duplicada aqui — vem de
-  `preparacao_gastos` filtrada pelo mês.
+  observacoes, lembrete_*, nota_fiscal_url, nota_fiscal_tipo`. A "preparação dos carros" **não** é
+  duplicada aqui — vem de `preparacao_gastos` filtrada pelo mês.
+- Storage `notas-fiscais` (`0012`) — bucket privado das notas fiscais, caminho `<loja_id>/...`,
+  policies RLS que só liberam objetos da loja do usuário. (Isso é a NF **anexada** por foto/PDF —
+  ver ADR-15; não confundir com a NF-e **emitida** abaixo.)
+- `nota_fiscal` (`0018` — ADR-17): NF-e emitida por venda, 1:1 com `vendas`. `spedy_invoice_id`,
+  `integration_id` (= `venda_id`, idempotência do lado da Spedy), `status` (created|enqueued|
+  received|authorized|rejected|canceled|denied|disabled|removed), `number`, `access_key`,
+  `protocolo`, `processing_status/message/code`. Canal `spedy` no catálogo `canal`; credencial
+  (company id + api key da sub-empresa) por loja em `canal_credencial`.
 
 **CRM** (`0004`, `0011`)
 - `leads` — `nome, telefone, canal_origem, vendedor_id, etapa
@@ -224,6 +330,11 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
   (status por veículo×canal), `publicacao_job` (fila).
 - Mensageria: `canal_mensageria_credencial` (WABA da loja), `contato`, `conversa`
   (`janela_24h_expira_em`), `mensagem`.
+- RENAVE (`0017` — ADR-16): `renave_registro` — evento legal por veículo (`evento
+  entrada|saida|consignacao, status pendente|registrado|erro|cancelado, protocolo, atpv_e_url,
+  dados (jsonb, auditoria), registrado_em`; 1 por veículo×evento) + `renave_job` (fila, mesmo
+  padrão de `publicacao_job`). Canal `renave` entra no catálogo `canal`; credencial da
+  integradora (Renave Fácil) por loja em `canal_credencial`.
 
 ---
 
@@ -273,15 +384,25 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   contador "Exibindo X de Y". Mantêm referência ao registro original.
 - **Cadastrar veículo**: identidade + compra/pedido/mínimo, descrição, fotos (upload), RENAVAM;
   atalhos "Buscar pela placa" / "Enviar CRLV-e" (previstos, hoje "em breve").
+  Checkboxes **"Publicar anúncio em"** (opcional): só canais **conectados** habilitam; salvar
+  não espera portal nenhum — as publicações rodam assíncronas após o save e o resultado por
+  canal fica no modal **Publicar / status** (mesma camada de conectores da seção 8).
 - **Marcador** editável (texto + cor).
 - **Registrar venda**: valor real com **lucro ao vivo** + **aviso de abaixo do mínimo**, data,
-  **vendedor** (equipe da loja), comprador, forma de pagamento, **origem do lead** (de onde veio a
-  venda — tráfego pago/portais), observação. Move o carro para
-  vendidos (consignado → repasse). Lucro nunca guardado fixo.
+  **vendedor** (equipe da loja), comprador (nome + **CPF/CNPJ**), forma de pagamento, **origem do
+  lead** (de onde veio a venda — tráfego pago/portais), observação. Move o carro para
+  vendidos (consignado → repasse). Lucro nunca guardado fixo. Se a loja tiver o complemento de
+  **NF-e** habilitado (ADR-17), a venda dispara a emissão automaticamente (assíncrona — nunca
+  bloqueia o registro; falta o CPF/CNPJ do comprador é a causa mais comum de não emitir).
 - **Publicar / status** por canal (ver seção 8).
 - **Ficha de documentos** por carro (à venda e vendido): anexar por tipo (ATPV-e, CRLV-e, CRV,
   contrato, recibo, procuração, CNH do comprador, comprovante, outro) com status
-  anexado/assinado/pendente. A ATPV-e é só guardada — a transferência é no Detran.
+  anexado/assinado/pendente. A ATPV-e é só guardada — a transferência é no Detran
+  (até o conector RENAVE entrar — ADR-16).
+- **RENAVE** (*previsto* — ADR-16): status do registro legal por veículo (entrada / saída /
+  consignação) visível na tabela e na ficha; cadastrar veículo e registrar venda disparam o
+  registro **assíncrono** via integradora (como a publicação em portais); aviso ao vender carro
+  sem entrada registrada; consignado exige o contrato eletrônico no RENAVE.
 - **Desempenho dos vendedores** (só dono): destaque do mês, mês passado, total do mês;
   minimizável; histórico de ranking mês a mês (dados das vendas por `vendedor_id`).
 
@@ -292,8 +413,8 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   no **Registrar venda**; remover, some. (No real, adicionar envia um convite de acesso.)
 - **Conexões**: conectar/desconectar os canais da loja (anúncio + WhatsApp) — antes era página
   separada, agora vive aqui. As credenciais são da loja; o FINANCIA+ só orquestra.
-- **Identidade da loja**: nome, CNPJ e logo (a logo entra em destaque no cabeçalho dos PDFs).
-- **Distribuição de leads**: regra por canal → vendedor (fixo/rodízio) usada pelo CRM.
+- **Identidade da loja**: nome/razão social, CNPJ, **endereço (sede)** e **cidade/UF** e logo — a
+  logo entra em destaque no cabeçalho dos PDFs e os dados da loja preenchem os contratos.
 
 ### Preparação ([`src/modules/preparacao`](src/modules/preparacao))
 Lista de todos os carros (nº de itens, gasto, situação: sem lançamentos / em preparo / pronto).
@@ -303,6 +424,7 @@ estoque, descrição, valor, status pago/pendente, observação (data automátic
 entrada: botão no topo (sem carro) e dentro da planilha do carro (carro pré-selecionado). Escolhido o
 carro **uma vez**, dá para lançar **vários gastos de uma só vez** ("Adicionar outro gasto"). **Esse
 total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte única (`gasto_preparacao`).
+Cada gasto aceita **anexar a nota fiscal** (foto/PDF) — "Anexar" / "Ver NF" (ver ADR-15).
 
 ### Financeiro ([`src/modules/financeiro`](src/modules/financeiro)) — *só dono*
 - **3 KPIs** na ordem fixa: Faturamento → **Lucro** → Gasto total.
@@ -310,11 +432,15 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
   lembrete, status, total); **preparação dos carros** clicável → visão do mês (lista com o carro)
   e "Adicionar despesa" abrindo o **mesmo formulário** da Preparação (fonte única). O mesmo gasto
   aparece nas duas telas e não é descontado duas vezes no resultado.
-- **Lucro por carro vendido** — clicável, abre o detalhe da conta (comprei por X, preparação item
-  a item, vendi por Y, fórmula) + resultado da loja no mês.
-- **Contas a pagar**: visão filtrada (status pendente) do mês — todos os pendentes das 3 categorias
-  (fixas + preparação + outras) com categoria, valor e total; "Marcar pago" tira da lista. Mesma
-  fonte das planilhas (não duplica dado).
+- **Nota fiscal por despesa**: toda linha das 3 categorias (fixas, outras, preparação) aceita
+  **anexar** a NF (foto JPG/PNG ou PDF) e depois **Ver NF**; é opcional e fica vinculada ao
+  lançamento, isolada por loja no Storage (ver ADR-15).
+- **Lucro por carro vendido** — **toda** venda do mês aparece aqui (sem exceção), com a conta
+  `venda − compra − preparação`; resultado **negativo é mostrado em vermelho**. Clicável: abre o
+  detalhe (comprei por X, preparação item a item, vendi por Y, fórmula) + resultado da loja no mês.
+- **Fonte única da venda**: registrar a venda no Estoque alimenta na hora o Faturamento (Σ
+  `valor_venda` do mês), o contador de carros vendidos, o Lucro e o Resultado — tudo derivado da
+  mesma lista de vendas, nada hardcoded (ver ADR-13).
 - **Histórico mês a mês** clicável; cada mês abre com as mesmas planilhas **editáveis** (correção
   contábil). Métricas calculadas por query.
 - **Virada de mês**: Preparação e Outras começam vazias no mês novo (não são transportadas);
@@ -322,24 +448,28 @@ total alimenta o lucro do carro no Estoque e a despesa do mês** — fonte únic
   nunca é apagado.
 
 ### CRM ([`src/modules/crm`](src/modules/crm))
-- **3 KPIs** (leads do mês, conversão, negócios em aberto).
+- **3 KPIs** (leads do mês, conversão, **canal que mais vendeu** no mês — a `origem_lead`
+  com mais vendas no mês corrente, com o complemento "X de Y vendas do mês").
 - **Negociações**: funil kanban arrastável — Novo lead → Em conversa → Negociação → Agendado →
   Ficha aprovada → Pós-venda; a etapa persiste a cada movimento. Cada card mostra o canal de
   origem e o **vendedor responsável**; dá para **filtrar por canal**.
-- **Distribuição automática**: regra por canal → vendedor (fixo ou rodízio), configurada em
-  Configurações. Leads que chegam por cada canal entram em "Novo lead" já atribuídos.
 - **Conversas**: inbox de WhatsApp amarrado ao lead (ver seção 8).
-- **Histórico mês a mês** (leads, vendas, conversão, ticket médio).
+- **Histórico mês a mês** (leads, vendas, conversão, **canal que mais vendeu** — a
+  `origem_lead` com mais vendas em cada mês).
 
 ### Contratos ([`src/modules/contratos`](src/modules/contratos))
 - Grade de **5 modelos** (compra e venda, recibo de sinal, consignação, procuração, termo de test
   drive). Documentos saem com **logo/nome da loja em destaque** no cabeçalho e "Financia+" pequeno
   (identidade editável em Configurações → Identidade da loja: nome/CNPJ/logo).
-- **Consignação**: o consignante é **empresa** (razão social, CNPJ, telefone, endereço) e vem
-  **preenchido automaticamente** do cadastro do veículo consignado. **Recibo de sinal** inclui o
-  endereço do cliente e o valor do sinal (`{{valor_sinal}}`).
-- Formulário: dados do cliente (nome, CPF, telefone, **data de nascimento** — sem profissão/RG) +
-  **seleção do carro do estoque** (preenche tudo) + **campos específicos por tipo**.
+- **Bloco único "Cliente"** por documento (campos definidos por modelo, sem `profissão/RG/nacionalidade`):
+  - *Compra e venda*: nome, CPF, nascimento, estado civil, telefone, e-mail, endereço (um só bloco).
+  - *Recibo de sinal*: nome, CPF, nascimento, telefone, endereço (juntos, sem bloco de endereço à parte).
+  - *Test drive (condutor)*: nome, CPF, nascimento, telefone, **endereço** (sem "trajeto/destino").
+  - *Procuração*: o **outorgante = cliente** (nome, CPF, nacionalidade, estado civil, endereço) + bloco
+    do **outorgado** (procurador).
+- **Consignação**: o consignante é **empresa** (razão social, CNPJ, telefone, **endereço**) e vem
+  **preenchido automaticamente** do cadastro do veículo consignado.
+- O **veículo** vem todo do cadastro do estoque (marca/modelo/ano/cor/combustível/placa/Renavam/chassi/km).
 - **Modelos padrão FINANCIA+** ([`modelosPadrao.js`](src/modules/contratos/modelosPadrao.js)) com
   `{{placeholders}}`: clicáveis para **ver e editar** ("Editar como meu modelo"); sempre há duas
   versões — **Padrão FINANCIA+** (intacto) e **Seu modelo (editado)** — com "Voltar ao padrão" e
@@ -372,7 +502,8 @@ Construída cedo para **não refatorar o núcleo** quando cada integração entr
 - **Fila + status**: publicar é assíncrono; cada veículo×canal tem status (pendente/publicado/
   erro/despublicado) e link, visível no modal **Publicar / status** do Estoque.
 - **Realidade de cada canal** (sinalizada na UI): Mercado Livre (API pública — 1º conector real
-  sugerido), OLX (API/feed), Webmotors (homologação Sensedia, pode ser hub), Instagram (Graph API
+  sugerido), OLX (API/feed), Webmotors (conector implementado — aguarda homologação Sensedia;
+  credencial da loja = usuário "Integrador de API" do Cockpit), Instagram (Graph API
   no feed, exige app review; **Marketplace orgânico não tem API aberta — fora do escopo**),
   Agregador (uma API conecta vários — é só mais um conector).
 
@@ -383,6 +514,19 @@ Construída cedo para **não refatorar o núcleo** quando cada integração entr
   UI troca o compositor automaticamente.
 - **Credenciais da loja**: cada loja tem o próprio WABA/número; o Financia+ orquestra (Meta direto
   ou via BSP). Adapter de mensageria com a mesma lógica de conector.
+
+### C. Estoque → RENAVE (estoque legal) — *previsto (ADR-16)*
+- **Obrigação legal**: Resolução CONTRAN nº 1.026/2026 — entrada, saída e consignação de veículos
+  registradas eletronicamente no RENAVE, via **integradora autorizada pela SENATRAN**; sem isso o
+  veículo não transfere/licencia e financiamentos não são pagos. Prazo de adaptação ~set/2026.
+- **Mesma anatomia dos outros canais**: conector com interface própria
+  (`registrarEntrada/registrarSaida/registrarConsignacao/consultarStatus`), fila + status por
+  veículo×evento (`renave_registro`), Edge Function autenticada (padrão `ml-api`), webhooks em
+  `integracao_evento`, credencial (e-CNPJ) **da loja** em `canal_credencial`, mock no demo.
+- **Pontos de disparo no núcleo**: `addVeiculo` (entrada), `registrarVenda` (saída) e o fluxo de
+  consignação — pontos únicos em `useEstoque.js`; o núcleo não conhece a integradora.
+- **Consignação**: contrato eletrônico assinado digitalmente **no próprio RENAVE**; o modelo do
+  sistema (ADR-14) é o espelho comercial. A ATPV-e passa a ser emitida no fluxo (revisão do ADR-11).
 
 ---
 
@@ -416,7 +560,7 @@ src/
 ├─ integracoes/    canais, anuncioCanonico, conectores, demoIntegr
 └─ App.jsx         rotas (login vs. app; gating por papel)
 supabase/
-├─ migrations/     0000…0007 (uma por fase/rodada)
+├─ migrations/     0000…0012 (uma por fase/rodada)
 └─ setup.sql       consolidado (cole tudo de uma vez no SQL Editor)
 ```
 
@@ -431,6 +575,16 @@ Permissões/papéis ✅ · Arquitetura de integrações (mock) ✅.
 
 **Pendente (precisa do Supabase conectado e/ou credenciais das lojas):**
 - Conectar o Supabase real (preencher `.env.local` + rodar `setup.sql`) e validar o isolamento.
+  **Prioridade elevada**: o RENAVE (abaixo) depende disso e tem prazo legal.
+- **RENAVE (ADR-16 — prazo de adaptação do mercado ~set/2026)**: integradora escolhida
+  (**Renave Fácil**) e migration pronta (`0017` — `renave_registro` + `renave_job`); falta:
+  conta/credenciais + homologação na integradora, conector + Edge Function, status no Estoque,
+  consignação com contrato eletrônico no RENAVE, RENAVAM/chassi obrigatórios com RENAVE ativo.
+- **Emissão de NF-e — Spedy (ADR-17)**: fornecedor escolhido; migration pronta (`0018` —
+  campos fiscais em `lojas` + tabela `nota_fiscal` + canal `spedy`); falta: conta **Owner** da
+  Spedy (Financia+, sandbox primeiro), Edge Function de provisionamento de sub-empresa + emissão
+  + webhook, wiring em `registrarVenda`, UI de status na venda, e confirmação dos códigos
+  tributários de veículo usado (CFOP/CST/redução de ICMS) com contador.
 - Conectores **reais** dos portais e do WhatsApp (entram por fase, conforme homologação).
 - Upload de fotos e de modelos `.docx`/PDF para o **Supabase Storage**.
 - Proteção de coluna por papel no banco (via `view veiculos_funcionario`).
@@ -459,6 +613,7 @@ Pontos que o dono do produto pode mudar; o sistema já roda com estes defaults:
 | Plataforma de assinatura | **ZapSign** (avançada); opção de elevar a qualificada |
 | Cobrança do plano | **Asaas** (demo) |
 | Funcionário vê **Desempenho dos vendedores** | Não (só dono) |
+| Integradora RENAVE | **Renave Fácil** (API RESTful sobre o Renave-WS/SERPRO — docs em apidoc.renavefacil.net). O conector segue agnóstico — trocar de integradora não toca o núcleo |
 
 ---
 
@@ -482,7 +637,7 @@ npm run dev        # http://localhost:5173  (abre em modo demonstração)
    VITE_SUPABASE_ANON_KEY=sua-anon-public-key
    ```
 4. No **SQL Editor**, cole **`supabase/setup.sql`** inteiro e rode (cria tudo na ordem). Ou rode
-   as migrations `0000`…`0007` de `supabase/migrations/` uma a uma.
+   as migrations `0000`…`0012` de `supabase/migrations/` uma a uma.
 5. Para testar rápido: em **Authentication → Providers → Email**, desligue *"Confirm email"*.
 6. Reinicie o `npm run dev`.
 
