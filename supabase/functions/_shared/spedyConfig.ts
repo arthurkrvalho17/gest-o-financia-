@@ -8,6 +8,78 @@
 // volta a um valor INVÁLIDO). Por isso o fluxo é sempre GET → altera só o
 // necessário → PUT do bloco completo. Nunca PUT cego.
 
+// ── Provisionamento (POST /v1/companies) ─────────────────────────────────
+
+// stateTaxNumber é necessário para emitir NF-e (doc primeiros-passos):
+// empresas isentas usam o LITERAL 'ISENTO'. Não existe default silencioso —
+// sem definição (IE nem isenção), o provisionamento é bloqueado com
+// mensagem apontando o cadastro.
+export function resolverInscricaoEstadual(bruta: string | null | undefined): string {
+  const valor = String(bruta ?? '').trim();
+  if (!valor) {
+    throw new Error(
+      'Informe a Inscrição Estadual da loja no cadastro (ou o valor ISENTO, se a loja for isenta) antes de habilitar a emissão — a NF-e exige essa definição.',
+    );
+  }
+  if (/^isento$/i.test(valor)) return 'ISENTO';
+  const digitos = valor.replace(/\D/g, '');
+  if (!digitos) {
+    throw new Error(
+      `Inscrição Estadual da loja inválida ("${valor}") — informe os dígitos da IE ou o valor ISENTO.`,
+    );
+  }
+  return digitos;
+}
+
+type Loja = Record<string, unknown> & {
+  nome?: string | null;
+  cnpj?: string | number | null;
+  inscricao_estadual?: string | null;
+  telefone?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  bairro?: string | null;
+  cep?: string | null;
+  cidade_ibge?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  regime_tributario?: string | null;
+  cnae_principal?: string | null;
+};
+
+// Monta o payload de criação da sub-empresa a partir do cadastro da loja.
+// Lança erro (mensagem acionável) quando falta um dado que a NF-e exige.
+export function montarPayloadEmpresa(loja: Loja, emailDono?: string | null) {
+  if (!loja?.cnpj) {
+    throw new Error('Cadastre o CNPJ da loja antes de habilitar a emissão de NF-e.');
+  }
+  return {
+    name: loja.nome,
+    legalName: loja.nome,
+    federalTaxNumber: String(loja.cnpj).replace(/\D/g, ''),
+    stateTaxNumber: resolverInscricaoEstadual(loja.inscricao_estadual),
+    email: emailDono || undefined,
+    phone: loja.telefone ? String(loja.telefone).replace(/\D/g, '') : undefined,
+    address: {
+      street: loja.logradouro || undefined,
+      number: loja.numero || undefined,
+      district: loja.bairro || undefined,
+      postalCode: loja.cep ? String(loja.cep).replace(/\D/g, '') : undefined,
+      city: {
+        code: loja.cidade_ibge || undefined,
+        name: loja.cidade || undefined,
+        state: loja.uf || undefined,
+      },
+    },
+    taxRegime: loja.regime_tributario || undefined,
+    economicActivities: loja.cnae_principal
+      ? [{ code: loja.cnae_principal, isMain: true }]
+      : undefined,
+  };
+}
+
+// ── Configuração de emissão (settings) ───────────────────────────────────
+
 export const ENVIRONMENT_TYPES = ['production', 'development', 'simulation'] as const;
 export type EnvironmentType = (typeof ENVIRONMENT_TYPES)[number];
 

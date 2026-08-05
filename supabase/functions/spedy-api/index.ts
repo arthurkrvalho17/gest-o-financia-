@@ -23,7 +23,11 @@
 // loja_config.config_fiscal, configurado pelo lojista com o contador.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { prepararBlocosConfiguracao, resolverEnvironmentType } from '../_shared/spedyConfig.ts';
+import {
+  montarPayloadEmpresa,
+  prepararBlocosConfiguracao,
+  resolverEnvironmentType,
+} from '../_shared/spedyConfig.ts';
 
 // Ambientes (doc: pages/start/ambiente-de-testes):
 //   produção  https://api.spedy.com.br/v1          (default)
@@ -66,7 +70,6 @@ async function provisionar(admin: ReturnType<typeof createClient>, lojaId: strin
 
   const { data: loja } = await admin.from('lojas').select('*').eq('id', lojaId).maybeSingle();
   if (!loja) return json(404, { erro: 'Loja não encontrada.' });
-  if (!loja.cnpj) return json(400, { erro: 'Cadastre o CNPJ da loja antes de habilitar a emissão de NF-e.' });
 
   const { data: dono } = await admin
     .from('usuarios')
@@ -76,29 +79,14 @@ async function provisionar(admin: ReturnType<typeof createClient>, lojaId: strin
     .limit(1)
     .maybeSingle();
 
-  const payload = {
-    name: loja.nome,
-    legalName: loja.nome,
-    federalTaxNumber: String(loja.cnpj).replace(/\D/g, ''),
-    stateTaxNumber: loja.inscricao_estadual || undefined,
-    email: dono?.email || undefined,
-    phone: loja.telefone ? String(loja.telefone).replace(/\D/g, '') : undefined,
-    address: {
-      street: loja.logradouro || undefined,
-      number: loja.numero || undefined,
-      district: loja.bairro || undefined,
-      postalCode: loja.cep ? String(loja.cep).replace(/\D/g, '') : undefined,
-      city: {
-        code: loja.cidade_ibge || undefined,
-        name: loja.cidade || undefined,
-        state: loja.uf || undefined,
-      },
-    },
-    taxRegime: loja.regime_tributario || undefined,
-    economicActivities: loja.cnae_principal
-      ? [{ code: loja.cnae_principal, isMain: true }]
-      : undefined,
-  };
+  // Bloqueia com mensagem acionável quando falta CNPJ ou a definição da
+  // Inscrição Estadual (dígitos ou o literal ISENTO — exigência da NF-e).
+  let payload: ReturnType<typeof montarPayloadEmpresa>;
+  try {
+    payload = montarPayloadEmpresa(loja, dono?.email);
+  } catch (e) {
+    return json(400, { erro: (e as Error).message });
+  }
 
   const { ok, status, data } = await chamarSpedy('/companies', ownerKey, 'POST', payload);
   if (!ok) return json(status, { erro: 'Falha ao criar empresa na Spedy.', detalhe: data });
