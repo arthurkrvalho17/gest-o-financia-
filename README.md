@@ -152,7 +152,8 @@ o caminho mais simples e previsível.
 ### ADR-09 — Integrações como **camada de conectores plugáveis**
 **Decisão:** publicação em portais e mensageria são uma camada de adapters com **interface comum**
 (`publicar/atualizar/despublicar/consultarStatus`; `enviar` para mensageria) + registry +
-fila/status. Hoje os adapters são *mock*. Ver [`src/integracoes/`](src/integracoes).
+fila/status. Mercado Livre, OLX e Webmotors têm adapter real (aguardando credenciais/
+homologação); os demais canais seguem *mock*. Ver [`src/integracoes/`](src/integracoes).
 **Por quê:** princípio nº 2 e a realidade heterogênea dos canais (cada portal tem homologação,
 limites e latência próprios). Trocar/adicionar canal = adicionar um adapter, sem tocar no núcleo.
 Um **agregador** (que conecta vários portais por uma API só) é **apenas mais um conector**, então
@@ -502,7 +503,9 @@ Construída cedo para **não refatorar o núcleo** quando cada integração entr
 - **Fila + status**: publicar é assíncrono; cada veículo×canal tem status (pendente/publicado/
   erro/despublicado) e link, visível no modal **Publicar / status** do Estoque.
 - **Realidade de cada canal** (sinalizada na UI): Mercado Livre (API pública — 1º conector real
-  sugerido), OLX (API/feed), Webmotors (conector implementado — aguarda homologação Sensedia;
+  sugerido), OLX (Autoupload implementado: Edge Function `olx-api`, Catálogo de Autos
+  obrigatório, moderação assíncrona com status `processando`, token de ~12h **sem refresh** —
+  aguarda credenciais; ver INTEGRACOES.md §2), Webmotors (conector implementado — aguarda homologação Sensedia;
   credencial da loja = usuário "Integrador de API" do Cockpit), Instagram (Graph API
   no feed, exige app review; **Marketplace orgânico não tem API aberta — fora do escopo**),
   Agregador (uma API conecta vários — é só mais um conector).
@@ -560,8 +563,10 @@ src/
 ├─ integracoes/    canais, anuncioCanonico, conectores, demoIntegr
 └─ App.jsx         rotas (login vs. app; gating por papel)
 supabase/
-├─ migrations/     0000…0012 (uma por fase/rodada)
-└─ setup.sql       consolidado (cole tudo de uma vez no SQL Editor)
+├─ functions/      Edge Functions (ml-api, ml-oauth-callback, ml-webhook, olx-api,
+│                  olx-oauth-callback, webmotors-*, spedy-*)
+├─ migrations/     0000…0021 (uma por fase/rodada)
+└─ setup.sql       consolidado ATÉ a 0012 — de 0013 em diante, rode as migrations
 ```
 
 ---
@@ -571,11 +576,15 @@ supabase/
 **Construído:** Fundação ✅ · Estoque ✅ (filtros, semáforo de tempo, ficha de docs, desempenho de
 vendedores) · Preparação ✅ · Financeiro ✅ · CRM ✅ (funil + inbox) · Contratos ✅ (campos por tipo,
 modelos da loja, assinatura eletrônica) · Configurações ✅ (plano + vendedores) ·
-Permissões/papéis ✅ · Arquitetura de integrações (mock) ✅.
+Permissões/papéis ✅ · Arquitetura de integrações ✅ · **Supabase conectado** ✅ (banco/auth/
+storage, migrations aplicadas — ver INTEGRACOES.md §1) · Conectores reais implementados
+aguardando credenciais/homologação: Mercado Livre, OLX, Webmotors, Spedy.
 
-**Pendente (precisa do Supabase conectado e/ou credenciais das lojas):**
-- Conectar o Supabase real (preencher `.env.local` + rodar `setup.sql`) e validar o isolamento.
-  **Prioridade elevada**: o RENAVE (abaixo) depende disso e tem prazo legal.
+**Pendente (precisa de credenciais externas e/ou deploy):**
+- Validar o isolamento multi-loja no Supabase real (teste das duas contas, seção 13).
+- **OLX**: credenciais (e-mail a suporteintegrador@olxbr.com), deploy de `olx-api` +
+  `olx-oauth-callback`, migrations `0020`/`0021` — código pronto e testado por mock
+  (INTEGRACOES.md §2).
 - **RENAVE (ADR-16 — prazo de adaptação do mercado ~set/2026)**: integradora escolhida
   (**Renave Fácil**) e migration pronta (`0017` — `renave_registro` + `renave_job`); falta:
   conta/credenciais + homologação na integradora, conector + Edge Function, status no Estoque,
@@ -585,8 +594,10 @@ Permissões/papéis ✅ · Arquitetura de integrações (mock) ✅.
   Spedy (Financia+, sandbox primeiro), Edge Function de provisionamento de sub-empresa + emissão
   + webhook, wiring em `registrarVenda`, UI de status na venda, e confirmação dos códigos
   tributários de veículo usado (CFOP/CST/redução de ICMS) com contador.
-- Conectores **reais** dos portais e do WhatsApp (entram por fase, conforme homologação).
-- Upload de fotos e de modelos `.docx`/PDF para o **Supabase Storage**.
+- Conectores restantes ainda em mock: WhatsApp, Instagram e Agregador (entram por fase,
+  conforme homologação); ML/OLX/Webmotors só aguardam credenciais (acima).
+- Upload de modelos `.docx`/PDF de contrato para o **Supabase Storage** (fotos, docs do
+  veículo e logo já sobem — `src/lib/storage.js`).
 - Proteção de coluna por papel no banco (via `view veiculos_funcionario`).
 - Deploy (Vercel/Netlify) e cobrança da assinatura (Asaas) — pós-MVP.
 
@@ -636,8 +647,8 @@ npm run dev        # http://localhost:5173  (abre em modo demonstração)
    VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
    VITE_SUPABASE_ANON_KEY=sua-anon-public-key
    ```
-4. No **SQL Editor**, cole **`supabase/setup.sql`** inteiro e rode (cria tudo na ordem). Ou rode
-   as migrations `0000`…`0012` de `supabase/migrations/` uma a uma.
+4. No **SQL Editor**, rode as migrations `0000`…`0021` de `supabase/migrations/` na ordem.
+   (`setup.sql` consolida só até a `0012` — se usá-lo, complete com as migrations `0013`+.)
 5. Para testar rápido: em **Authentication → Providers → Email**, desligue *"Confirm email"*.
 6. Reinicie o `npm run dev`.
 
