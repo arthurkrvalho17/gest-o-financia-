@@ -11,6 +11,10 @@
 //
 // Ações (action no body):
 //   provisionar  → POST /v1/companies (chave Owner) + salva credencial
+//                  + configura a emissão em seguida (ver 'configurar')
+//   configurar   → GET/PUT /v1/companies/{id}/settings (chave Owner):
+//                  productInvoice.{environmentType, series, nextNumber} —
+//                  obrigatório antes de emitir; GET→altera→PUT, nunca PUT cego
 //   certificado  → POST /v1/companies/{id}/certificates (chave Owner)
 //   emitir       → monta e envia POST /v1/product-invoices (chave da loja)
 //   consultar    → GET /v1/product-invoices/{id} e atualiza nota_fiscal
@@ -19,6 +23,7 @@
 // loja_config.config_fiscal, configurado pelo lojista com o contador.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { prepararBlocosConfiguracao, resolverEnvironmentType } from '../_shared/spedyConfig.ts';
 
 // Ambientes (doc: pages/start/ambiente-de-testes):
 //   produção  https://api.spedy.com.br/v1          (default)
@@ -113,7 +118,63 @@ async function provisionar(admin: ReturnType<typeof createClient>, lojaId: strin
     { onConflict: 'loja_id,canal' }
   );
 
-  return json(200, { ok: true, company_id: companyId });
+  // A sub-empresa precisa nascer com série/numeração/ambiente prontos —
+  // sem isso a primeira emissão falharia. Se a configuração falhar, a
+  // empresa já existe e a credencial já está salva: devolvemos ok com o
+  // aviso, e a action 'configurar' permite reexecutar isolada.
+  const cfg = await configurarEmissao(admin, lojaId);
+  return json(200, {
+    ok: true,
+    company_id: companyId,
+    configurado: cfg.ok,
+    ...(cfg.ok
+      ? { environment_type: cfg.environmentType }
+      : { aviso: `Empresa criada, mas a configuração de emissão falhou: ${cfg.erro} Reexecute com a action 'configurar'.` }),
+  });
+}
+
+// ── Configuração de emissão (settings da empresa) ────────────────────────
+// Obrigatória antes de emitir (doc configuracao-inicial): a empresa nasce sem
+// série/numeração/ambiente válidos para NF-e. Fluxo GET → altera SÓ o bloco
+// productInvoice → PUT do bloco completo (o PUT substitui o bloco enviado;
+// campo omitido volta a default inválido — nunca PUT cego).
+async function configurarEmissao(
+  admin: ReturnType<typeof createClient>,
+  lojaId: string,
+): Promise<{ ok: boolean; environmentType?: string; erro?: string; detalhe?: unknown }> {
+  const ownerKey = Deno.env.get('SPEDY_OWNER_API_KEY');
+  if (!ownerKey) return { ok: false, erro: 'SPEDY_OWNER_API_KEY não configurado.' };
+
+  const { data: cred } = await admin
+    .from('canal_credencial')
+    .select('credenciais')
+    .eq('loja_id', lojaId)
+    .eq('canal', 'spedy')
+    .maybeSingle();
+  const companyId = cred?.credenciais?.company_id;
+  if (!companyId) return { ok: false, erro: 'Empresa ainda não provisionada na Spedy.' };
+
+  const atual = await chamarSpedy(`/companies/${companyId}/settings`, ownerKey);
+  if (!atual.ok) {
+    return { ok: false, erro: 'Falha ao ler as configurações da empresa na Spedy.', detalhe: atual.data };
+  }
+
+  // Sandbox → 'development' (Homologação); produção → 'production'.
+  // SPEDY_ENVIRONMENT_TYPE sobrepõe (validado); no sandbox o default NUNCA é
+  // production — configurar production dentro do sandbox emite nota com
+  // validade fiscal REAL (aviso da doc de ambiente de testes).
+  const environmentType = resolverEnvironmentType(
+    SPEDY_SANDBOX,
+    Deno.env.get('SPEDY_ENVIRONMENT_TYPE'),
+  );
+
+  const blocos = prepararBlocosConfiguracao(atual.data, { environmentType });
+  const put = await chamarSpedy(`/companies/${companyId}/settings`, ownerKey, 'PUT', blocos);
+  if (!put.ok) {
+    return { ok: false, erro: 'Falha ao gravar as configurações de emissão na Spedy.', detalhe: put.data };
+  }
+
+  return { ok: true, environmentType };
 }
 
 // ── Ação: certificado (envia o .pfx da loja para a Spedy) ────────────────
@@ -321,6 +382,12 @@ Deno.serve(async (req: Request) => {
   switch (action) {
     case 'provisionar':
       return provisionar(admin, usuario.loja_id);
+    case 'configurar': {
+      const cfg = await configurarEmissao(admin, usuario.loja_id);
+      return cfg.ok
+        ? json(200, { ok: true, environment_type: cfg.environmentType })
+        : json(502, { erro: cfg.erro, detalhe: cfg.detalhe });
+    }
     case 'certificado':
       return certificado(admin, usuario.loja_id, body);
     case 'emitir':
