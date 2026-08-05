@@ -217,7 +217,9 @@ async function certificado(
 
   const bytes = Uint8Array.from(atob(fileBase64), (c) => c.charCodeAt(0));
   const form = new FormData();
-  form.append('file', new Blob([bytes]), filename || 'certificado.pfx');
+  // Campos do multipart conforme a doc (guias primeiros-passos/configuracao-
+  // inicial e api-reference "adicionar-certificado"): certificateFile + password.
+  form.append('certificateFile', new Blob([bytes]), filename || 'certificado.pfx');
   form.append('password', password);
 
   const res = await fetch(`${SPEDY_API}/companies/${companyId}/certificates`, {
