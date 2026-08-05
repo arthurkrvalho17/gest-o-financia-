@@ -168,7 +168,27 @@ async function configurarEmissao(
     Deno.env.get('SPEDY_ENVIRONMENT_TYPE'),
   );
 
-  const blocos = prepararBlocosConfiguracao(atual.data, { environmentType });
+  // TODO(Arthur) — DECISÃO DE NEGÓCIO PENDENTE (infRespTec da NF-e):
+  //   opção A: Financia+ assume responsável técnico → nossa marca no
+  //            documento fiscal, mas exige autorização de uso (CSRT) por
+  //            SEFAZ estadual;
+  //   opção B: deixar a Spedy assumir (CNPJ 47332178000101) → menos atrito.
+  // Enquanto não decidido, NENHUM valor é configurado aqui: o secret
+  // SPEDY_TECHNICAL_RESPONSIBLE fica vazio e o bloco general nem é enviado
+  // (enviá-lo sem technicalResponsible REMOVERIA o responsável — regra da
+  // doc). Quando decidido, basta setar o secret com o JSON
+  // { federalTaxNumber, contactName, email, phone } — nada de hardcode.
+  let technicalResponsible: Record<string, unknown> | null = null;
+  const respTecRaw = Deno.env.get('SPEDY_TECHNICAL_RESPONSIBLE');
+  if (respTecRaw) {
+    try {
+      technicalResponsible = JSON.parse(respTecRaw);
+    } catch {
+      return { ok: false, erro: 'SPEDY_TECHNICAL_RESPONSIBLE não é um JSON válido.' };
+    }
+  }
+
+  const blocos = prepararBlocosConfiguracao(atual.data, { environmentType, technicalResponsible });
   const put = await chamarSpedy(`/companies/${companyId}/settings`, ownerKey, 'PUT', blocos);
   if (!put.ok) {
     return { ok: false, erro: 'Falha ao gravar as configurações de emissão na Spedy.', detalhe: put.data };

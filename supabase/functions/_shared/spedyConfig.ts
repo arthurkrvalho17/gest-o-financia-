@@ -24,7 +24,15 @@ export function resolverEnvironmentType(sandbox: boolean, override?: string | nu
 
 type Settings = Record<string, unknown> & {
   productInvoice?: Record<string, unknown> | null;
+  general?: Record<string, unknown> | null;
 };
+
+// general.technicalResponsible (infRespTec da NF-e):
+// { federalTaxNumber, contactName, email, phone, csrts? } — doc de
+// configuracao-inicial. Um SaaS que emite por terceiros DEVE configurá-lo;
+// sem configurar (nem na empresa nem na Owner), a Spedy assume como
+// responsável técnico (CNPJ 47332178000101).
+export type TechnicalResponsible = Record<string, unknown>;
 
 // Recebe as settings ATUAIS (resposta do GET) e devolve só os blocos a
 // enviar no PUT, com os campos existentes preservados (espalhados) e apenas
@@ -32,7 +40,13 @@ type Settings = Record<string, unknown> & {
 // (series "1", nextNumber 1) e só entram quando a empresa ainda não tem.
 export function prepararBlocosConfiguracao(
   settingsAtuais: Settings | null | undefined,
-  { environmentType }: { environmentType: EnvironmentType },
+  {
+    environmentType,
+    technicalResponsible = null,
+  }: {
+    environmentType: EnvironmentType;
+    technicalResponsible?: TechnicalResponsible | null;
+  },
 ) {
   const atuais = settingsAtuais || {};
   const productInvoiceAtual = (atuais.productInvoice || {}) as Record<string, unknown>;
@@ -47,5 +61,21 @@ export function prepararBlocosConfiguracao(
   // Só o bloco alterado vai no PUT: blocos não enviados ficam intactos na
   // Spedy (a substituição é por bloco) — não reenviamos general/consumer/
   // serviceInvoice sem necessidade.
-  return { productInvoice };
+  const blocos: { productInvoice: typeof productInvoice; general?: Record<string, unknown> } = {
+    productInvoice,
+  };
+
+  // general só entra quando há responsável técnico a gravar. Regra da doc:
+  // reenviar general OMITINDO technicalResponsible REMOVE o responsável —
+  // por isso, sempre que general for enviado, o campo vai junto (o novo, ou
+  // o que já estava gravado).
+  if (technicalResponsible) {
+    const geralAtual = (atuais.general || {}) as Record<string, unknown>;
+    blocos.general = {
+      ...geralAtual,
+      technicalResponsible: technicalResponsible ?? geralAtual.technicalResponsible,
+    };
+  }
+
+  return blocos;
 }

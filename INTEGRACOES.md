@@ -601,6 +601,13 @@ em portal nenhum. Ver ADR-17 no README para a decisão e o porquê.
 3. **Confirmar com o contador de cada loja** os códigos tributários de venda de veículo usado
    (CFOP `5502`/`6502`, CSOSN/CST do ICMS, redução de base, PIS/COFINS) — o sistema nunca assume
    esses valores sozinho; ver o formato de `config_fiscal` comentado na migration `0019`.
+4. **DECISÃO EM ABERTO (Arthur) — responsável técnico da NF-e (infRespTec):** Financia+ assume
+   responsável técnico (nossa marca no documento fiscal; exige autorização de uso/CSRT por SEFAZ
+   estadual) **OU** deixa a Spedy assumir (CNPJ 47332178000101 — menos atrito). O código já lê o
+   secret `SPEDY_TECHNICAL_RESPONSIBLE` (JSON `{ federalTaxNumber, contactName, email, phone }`)
+   quando a action `configurar` roda; enquanto o secret não existir, nada é configurado e a Spedy
+   assume por default. Atenção à regra da doc: reenviar o bloco `general` sem
+   `technicalResponsible` REMOVE o responsável — o código preserva o campo em todo PUT de `general`.
 
 ### Ambientes (sandbox × produção)
 
