@@ -9,23 +9,24 @@ import { useAuth } from '../../auth/AuthContext';
 // tributária (config_fiscal), confirmada com o contador.
 export function useSpedyAuth() {
   const { loja } = useAuth();
+  const lojaId = loja?.id;
   const [status, setStatus] = useState('carregando');
   const [erro, setErro] = useState('');
 
   useEffect(() => {
-    if (!supabaseConfigurado || !loja?.id) return;
-    carregarStatus();
-  }, [loja?.id]);
-
-  async function carregarStatus() {
-    const { data } = await supabase
+    if (!supabaseConfigurado || !lojaId) return;
+    let ativo = true;
+    supabase
       .from('canal_credencial')
       .select('status')
-      .eq('loja_id', loja.id)
+      .eq('loja_id', lojaId)
       .eq('canal', 'spedy')
-      .maybeSingle();
-    setStatus(data?.status || 'desconectado');
-  }
+      .maybeSingle()
+      .then(({ data }) => {
+        if (ativo) setStatus(data?.status || 'desconectado');
+      });
+    return () => { ativo = false; };
+  }, [lojaId]);
 
   async function provisionar() {
     setErro('');
