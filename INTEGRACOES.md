@@ -602,6 +602,24 @@ em portal nenhum. Ver ADR-17 no README para a decisão e o porquê.
    (CFOP `5502`/`6502`, CSOSN/CST do ICMS, redução de base, PIS/COFINS) — o sistema nunca assume
    esses valores sozinho; ver o formato de `config_fiscal` comentado na migration `0019`.
 
+### Ambientes (sandbox × produção)
+
+O sandbox da Spedy é uma **conta separada** da de produção: exige um **novo cadastro**
+em `sandbox-app.spedy.com.br` (Plano Desenvolvedor, gratuito). As chaves de API e o
+cadastro de empresas de produção **não funcionam no sandbox, e vice-versa** — portanto
+`SPEDY_OWNER_API_KEY` tem um valor **diferente por ambiente**, e os dois secrets
+(`SPEDY_API_URL` + `SPEDY_OWNER_API_KEY`) devem ser trocados **sempre juntos**:
+
+| Secret | Sandbox (testes) | Produção |
+|---|---|---|
+| `SPEDY_API_URL` | `https://sandbox-api.spedy.com.br/v1` | *(não setar — default)* `https://api.spedy.com.br/v1` |
+| `SPEDY_OWNER_API_KEY` | chave Owner da **conta sandbox** | chave Owner da **conta de produção** |
+
+> ⚠️ A validade fiscal da nota NÃO vem do sandbox em si, e sim do
+> `productInvoice.environmentType` da empresa: é possível configurar `production`
+> DENTRO do sandbox e emitir nota com validade fiscal REAL. A action `configurar`
+> da `spedy-api` usa `development` (Homologação) como default no sandbox por isso.
+
 ### Deploy
 
 ```bash
@@ -609,9 +627,14 @@ em portal nenhum. Ver ADR-17 no README para a decisão e o porquê.
 supabase functions deploy spedy-api
 # o webhook recebe callbacks da Spedy SEM token Supabase → flag obrigatória
 supabase functions deploy spedy-webhook --no-verify-jwt
-supabase secrets set SPEDY_OWNER_API_KEY=<chave_da_conta_owner>
-# opcional, para testar no sandbox antes de ir a produção:
+
+# SANDBOX (testes) — os dois juntos, com a chave da conta sandbox:
 supabase secrets set SPEDY_API_URL=https://sandbox-api.spedy.com.br/v1
+supabase secrets set SPEDY_OWNER_API_KEY=<chave_owner_da_conta_SANDBOX>
+
+# PRODUÇÃO — remova SPEDY_API_URL (cai no default) e use a chave de produção:
+supabase secrets unset SPEDY_API_URL
+supabase secrets set SPEDY_OWNER_API_KEY=<chave_owner_da_conta_de_PRODUCAO>
 ```
 
 ### Registro do webhook (ação única — escopo de conta, não por loja)
