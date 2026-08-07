@@ -1,5 +1,5 @@
-// Lógica PURA da configuração de emissão da Spedy (sem Deno/rede) — usada
-// pela spedy-api e importável nos testes (vitest) sem tocar a Spedy real.
+// Lógica PURA da integração Spedy (sem Deno/rede) — usada pela spedy-api e
+// pelo spedy-webhook, e importável nos testes (vitest) sem tocar a Spedy real.
 //
 // Contexto (doc pages/guides/configuracao-inicial e primeiros-passos):
 // antes de emitir, a empresa precisa de PUT /v1/companies/{id}/settings com
@@ -150,4 +150,28 @@ export function prepararBlocosConfiguracao(
   }
 
   return blocos;
+}
+
+// ── Webhook (invoice.status_changed) ─────────────────────────────────────
+
+// Extrai do evento bruto o id da nota na Spedy (chave de busca em
+// nota_fiscal.spedy_invoice_id) e o patch a aplicar. invoiceId vazio =
+// evento sem data.id — o chamador registra o erro e não atualiza nada.
+export function montarPatchNota(evento: Record<string, unknown> | null | undefined) {
+  const data = ((evento as Record<string, unknown>)?.data || {}) as Record<string, any>;
+  const invoiceId = String(data.id || '');
+  if (!invoiceId) return { invoiceId: '', patch: null };
+
+  const patch: Record<string, unknown> = {
+    status: data.status,
+    atualizado_em: new Date().toISOString(),
+  };
+  if (data.number != null) patch.number = String(data.number);
+  if (data.authorization?.protocol) patch.protocolo = data.authorization.protocol;
+  if (data.processingDetail) {
+    patch.processing_status = data.processingDetail.status;
+    patch.processing_message = data.processingDetail.message;
+    patch.processing_code = data.processingDetail.code;
+  }
+  return { invoiceId, patch };
 }
