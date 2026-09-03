@@ -21,6 +21,8 @@ export function criarAdminFake(tabelasIniciais: Record<string, Row[]> = {}) {
     let payload: Row | null = null;
     let onConflict: string | null = null;
     let single = false;
+    let ordenacao: { campo: string; asc: boolean } | null = null;
+    let limite: number | null = null;
 
     function aplicaFiltros(linhas: Row[]) {
       return linhas.filter((l) => filtros.every(([c, v]) => l[c] === v));
@@ -28,7 +30,19 @@ export function criarAdminFake(tabelasIniciais: Record<string, Row[]> = {}) {
 
     function executar() {
       if (modo === 'select') {
-        const linhas = aplicaFiltros(db[tabela]);
+        let linhas = aplicaFiltros(db[tabela]);
+        // order/limit existem para as consultas que podem casar com mais de
+        // uma linha (ex.: as vendas de um mesmo veículo) — sem eles,
+        // `maybeSingle()` devolveria "a primeira que estiver no array", que
+        // não é ordem nenhuma.
+        if (ordenacao) {
+          const { campo, asc } = ordenacao;
+          linhas = [...linhas].sort((a, b) => {
+            if (a[campo] === b[campo]) return 0;
+            return (a[campo] > b[campo] ? 1 : -1) * (asc ? 1 : -1);
+          });
+        }
+        if (limite != null) linhas = linhas.slice(0, limite);
         return single ? { data: linhas[0] ?? null, error: null } : { data: linhas, error: null };
       }
       if (modo === 'insert') {
@@ -42,8 +56,13 @@ export function criarAdminFake(tabelasIniciais: Record<string, Row[]> = {}) {
         return { data: single ? (linhas[0] ?? null) : linhas, error: null };
       }
       if (modo === 'upsert') {
-        const chave = onConflict ?? 'id';
-        const existente = db[tabela].find((l) => l[chave] === payload![chave]);
+        // onConflict pode ser COMPOSTO ('veiculo_id,evento' — a unique de
+        // renave_registro na 0017). Sem o split, o lookup procuraria uma
+        // coluna literal chamada "veiculo_id,evento", acharia undefined dos
+        // dois lados e casaria com a PRIMEIRA linha da tabela — sobrescrevendo
+        // o registro errado sem erro nenhum.
+        const chaves = (onConflict ?? 'id').split(',').map((c) => c.trim());
+        const existente = db[tabela].find((l) => chaves.every((c) => l[c] === payload![c]));
         let linha: Row;
         if (existente) {
           Object.assign(existente, payload);
@@ -60,6 +79,11 @@ export function criarAdminFake(tabelasIniciais: Record<string, Row[]> = {}) {
     const builder: any = {
       select() { return builder; },
       eq(campo: string, valor: any) { filtros.push([campo, valor]); return builder; },
+      order(campo: string, opts?: { ascending?: boolean }) {
+        ordenacao = { campo, asc: opts?.ascending !== false };
+        return builder;
+      },
+      limit(n: number) { limite = n; return builder; },
       insert(obj: Row) { modo = 'insert'; payload = obj; return builder; },
       update(obj: Row) { modo = 'update'; payload = obj; return builder; },
       upsert(obj: Row, opts?: { onConflict?: string }) {
