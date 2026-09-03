@@ -1,23 +1,42 @@
-// Modelos de documento e seus campos específicos (pesquisados conforme as
-// exigências usuais no Brasil). Cada campo: { key, label, dinheiro?, textarea?, full?, valorPadrao? }.
+// Modelos de documento e seus campos. Cada campo: { key, label, dinheiro?, textarea?, full?, valorPadrao?, date? }.
 
 const T = (key, label, opts = {}) => ({ key, label, ...opts });
+
+// Campos do "cliente" (bloco único). Cada modelo escolhe quais usar e o rótulo do bloco.
+export const CLIENTE_CAMPOS = {
+  nome: { label: 'Nome completo', full: true },
+  cpf: { label: 'CPF' },
+  nascimento: { label: 'Data de nascimento', date: true },
+  estado_civil: { label: 'Estado civil' },
+  telefone: { label: 'Telefone' },
+  email: { label: 'E-mail' },
+  endereco: { label: 'Endereço completo', full: true },
+  nacionalidade: { label: 'Nacionalidade' },
+};
 
 export const MODELOS = {
   compra_venda: {
     nome: 'Contrato de compra e venda',
     desc: 'Venda do veículo ao cliente',
+    // Bloco ÚNICO do cliente (sem separar "qualificação"); sem nacionalidade.
+    clienteTitulo: 'Cliente',
+    cliente: ['nome', 'cpf', 'nascimento', 'estado_civil', 'telefone', 'email', 'endereco'],
     grupos: [
-      { titulo: 'Qualificação do comprador', campos: [
-        T('nacionalidade', 'Nacionalidade'), T('estado_civil', 'Estado civil'),
-        T('endereco', 'Endereço completo', { full: true }),
-      ] },
-      // Dados do veículo (RENAVAM, chassi, km, combustível) vêm do cadastro no estoque.
+      // Dados do veículo vêm do cadastro no estoque.
       { titulo: 'Negociação', campos: [
+        T('vendedor_nome', 'Vendedor'),
+        T('data_venda', 'Data da venda', { date: true }),
         T('valor_venda', 'Valor da venda', { dinheiro: true }),
-        T('forma_pagamento', 'Forma de pagamento'),
-        T('garantia', 'Garantia'),
-        T('observacoes', 'Observações / estado do veículo', { textarea: true, full: true }),
+        T('forma_pagamento', 'Forma de pagamento', { full: true }),
+        T('observacoes', 'Observações', { textarea: true, full: true }),
+      ] },
+      { titulo: 'Situação de regularidade (Cláusula Nona)', campos: [
+        T('tributos', 'Valor aproximado dos tributos'),
+        T('multas_abertas', 'Multas e taxas anuais em aberto'),
+        T('furto', 'Furto'),
+        T('alienacao', 'Alienação fiduciária'),
+        T('registros_impeditivos', 'Outros registros impeditivos', { full: true }),
+        T('troca_valor', 'Valor do veículo dado em troca', { dinheiro: true }),
       ] },
     ],
   },
@@ -25,10 +44,10 @@ export const MODELOS = {
     nome: 'Recibo de sinal',
     desc: 'Entrada / reserva do veículo',
     notaLegal: 'Sinal = arras (arts. 417–420 do Código Civil): se o cliente desiste, perde o sinal; se a loja desiste, devolve em dobro.',
+    // Cliente unificado (nome, CPF, nascimento, telefone e endereço juntos).
+    clienteTitulo: 'Cliente',
+    cliente: ['nome', 'cpf', 'nascimento', 'telefone', 'endereco'],
     grupos: [
-      { titulo: 'Dados do cliente', campos: [
-        T('endereco', 'Endereço completo', { full: true }),
-      ] },
       { titulo: 'Valores', campos: [
         T('valor_sinal', 'Valor do sinal recebido', { dinheiro: true }),
         T('observacoes', 'Observações', { textarea: true, full: true }),
@@ -38,8 +57,10 @@ export const MODELOS = {
   consignacao: {
     nome: 'Contrato de consignação',
     desc: 'Carro de terceiro à venda na loja',
+    // O consignante (empresa) vem preenchido do cadastro do veículo consignado.
+    clienteTitulo: 'Consignante (dono — empresa)',
+    cliente: [],
     grupos: [
-      // O consignante (empresa) vem preenchido do cadastro do veículo consignado.
       { titulo: 'Consignante (dono — empresa)', campos: [
         T('consignante_nome', 'Razão social', { full: true }),
         T('consignante_cnpj', 'CNPJ'), T('consignante_tel', 'Telefone'),
@@ -57,28 +78,37 @@ export const MODELOS = {
   procuracao: {
     nome: 'Procuração',
     desc: 'Transferência junto ao Detran',
+    // Outorgante = cliente (dono que outorga os poderes).
+    clienteTitulo: 'Outorgante (cliente)',
+    cliente: ['nome', 'cpf', 'nacionalidade', 'estado_civil', 'endereco'],
     grupos: [
-      { titulo: 'Outorgado', campos: [
+      { titulo: 'Outorgado (procurador)', campos: [
         T('outorgado_nome', 'Nome do outorgado', { full: true }),
-        T('outorgado_cpf', 'CPF'), T('outorgado_nascimento', 'Data de nascimento'),
+        T('outorgado_cpf', 'CPF'),
+        T('outorgado_nacionalidade', 'Nacionalidade'),
+        T('outorgado_estado_civil', 'Estado civil'),
+        T('outorgado_endereco', 'Endereço completo', { full: true }),
       ] },
-      // Dados do veículo (RENAVAM, chassi) vêm do cadastro no estoque.
-      { titulo: 'Mandato', campos: [
-        T('poderes', 'Poderes', { textarea: true, full: true, valorPadrao: 'Poderes para representar o outorgante junto ao Detran, assinar ATPV-e/CRV e praticar atos para a transferência do veículo.' }),
-        T('validade', 'Validade / prazo'), T('cidade', 'Cidade'),
+      // Dados do veículo vêm do cadastro no estoque.
+      { titulo: 'Procuração', campos: [
+        T('cidade_procuracao', 'Cidade'),
+        T('data_procuracao', 'Data', { date: true }),
       ] },
     ],
   },
   test_drive: {
     nome: 'Termo de test drive',
     desc: 'Responsabilidade durante o test drive',
+    // Condutor = cliente, com endereço completo.
+    clienteTitulo: 'Condutor',
+    cliente: ['nome', 'cpf', 'nascimento', 'telefone', 'endereco'],
     grupos: [
-      { titulo: 'Condutor', campos: [
+      { titulo: 'CNH', campos: [
         T('cnh_numero', 'CNH (número)'), T('cnh_categoria', 'Categoria'),
-        T('cnh_validade', 'Validade da CNH'), T('telefone', 'Telefone'),
+        T('cnh_validade', 'Validade da CNH'),
       ] },
       { titulo: 'Test drive', campos: [
-        T('data_hora', 'Data e hora'), T('trajeto', 'Trajeto previsto', { full: true }),
+        T('data_hora', 'Data e hora'),
         T('declaracao', 'Declaração de responsabilidade', { textarea: true, full: true, valorPadrao: 'O condutor assume total responsabilidade por danos, multas e ocorrências durante o test drive.' }),
       ] },
     ],
@@ -91,6 +121,11 @@ export const ORDEM_MODELOS = [
 
 // Campos do consignante que vêm do cadastro do veículo consignado (autofill).
 export const CAMPOS_CONSIGNANTE = ['consignante_nome', 'consignante_cnpj', 'consignante_tel', 'consignante_endereco'];
+
+// Campos do cliente exibidos no bloco único (lista de defs {key, ...}).
+export function camposCliente(tipo) {
+  return (MODELOS[tipo]?.cliente || []).map((k) => ({ key: k, ...CLIENTE_CAMPOS[k] }));
+}
 
 // Todos os campos extras achatados (para o formulário e valores padrão).
 export function camposExtra(tipo) {

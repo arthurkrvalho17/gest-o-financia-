@@ -1,38 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import Modal from '../../components/Modal';
 
-// Assinatura do cliente por 3 vias. O documento já sai assinado pela loja.
+// Aceite do cliente por 3 vias. O documento já sai assinado pela loja.
+//
+// Achado (31/08-01/09/2026): esta tela afirmava "assinatura eletrônica
+// avançada (Lei 14.063/2020), com trilha de auditoria" — nada disso existe
+// hoje. Não há identificação do signatário, hash do documento, carimbo de
+// tempo nem log; nenhuma plataforma de assinatura eletrônica está
+// integrada (o README já reconhecia isso como "hoje simulada"). O texto
+// abaixo descreve só o que o sistema realmente faz: um registro interno de
+// aceite, sem validade jurídica de assinatura avançada.
 export default function AssinaturaModal({ open, onClose, onConcluir }) {
   const [via, setVia] = useState(null); // null | aparelho | link | impressao
   useEffect(() => { if (open) setVia(null); }, [open]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Assinatura do cliente" maxWidth={460}>
+    <Modal open={open} onClose={onClose} title="Aceite do cliente" maxWidth={460}>
       <div className="text-[12.5px] text-muted mb-4 leading-relaxed">
-        O documento já está <b className="text-navy">assinado pela loja</b>. Escolha como o cliente assina —
-        assinatura eletrônica avançada (Lei 14.063/2020), com trilha de auditoria.
+        O documento já está <b className="text-navy">assinado pela loja</b>. Escolha como o cliente
+        confirma o aceite — hoje isso fica registrado internamente no sistema, sem valor de
+        assinatura eletrônica avançada; essa funcionalidade será habilitada em breve.
       </div>
 
       {!via && (
         <div className="flex flex-col gap-2.5">
-          <ViaBtn onClick={() => setVia('aparelho')} titulo="Assinar agora, neste aparelho" desc="Presencial — o cliente assina no celular do vendedor" />
-          <ViaBtn onClick={() => setVia('link')} titulo="Enviar link para o cliente" desc="Por WhatsApp/e-mail; ele assina pelo próprio celular" />
+          <ViaBtn onClick={() => setVia('aparelho')} titulo="Assinar agora, neste aparelho" desc="Presencial — o cliente desenha o aceite no celular do vendedor" />
+          <ViaBtn disabled titulo="Enviar link para o cliente" desc="Em breve — hoje o envio ainda seria manual (WhatsApp/e-mail por fora do sistema)" />
           <ViaBtn onClick={() => setVia('impressao')} titulo="Imprimir para assinar" desc="Assinatura física — fica Pendente até anexar o documento" />
         </div>
       )}
 
-      {via === 'aparelho' && <CanvasAssinatura onVoltar={() => setVia(null)} onConfirmar={() => onConcluir('aparelho')} />}
-
-      {via === 'link' && (
-        <div className="text-center py-4">
-          <p className="text-[13px] text-muted mb-4">Enviar o link de assinatura para o cliente:</p>
-          <div className="flex gap-2 justify-center">
-            <button onClick={() => onConcluir('link')} className="bg-[#25D366] text-white font-semibold text-[13px] px-4 py-2.5 rounded-lg">WhatsApp</button>
-            <button onClick={() => onConcluir('link')} className="bg-blue text-white font-semibold text-[13px] px-4 py-2.5 rounded-lg">E-mail</button>
-          </div>
-          <button onClick={() => setVia(null)} className="text-[12.5px] text-blue font-medium mt-4">Voltar</button>
-        </div>
-      )}
+      {via === 'aparelho' && <CanvasAssinatura onVoltar={() => setVia(null)} onConfirmar={(blob) => onConcluir('aparelho', blob)} />}
 
       {via === 'impressao' && (
         <div className="text-center py-4">
@@ -46,10 +44,20 @@ export default function AssinaturaModal({ open, onClose, onConcluir }) {
   );
 }
 
-function ViaBtn({ titulo, desc, onClick }) {
+function ViaBtn({ titulo, desc, onClick, disabled }) {
   return (
-    <button onClick={onClick} className="text-left border border-border rounded-[10px] px-4 py-3 hover:border-blue hover:bg-bg">
-      <div className="font-semibold text-[13.5px]">{titulo}</div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        'text-left border rounded-[10px] px-4 py-3',
+        disabled ? 'border-border bg-bg cursor-not-allowed opacity-70' : 'border-border hover:border-blue hover:bg-bg',
+      ].join(' ')}
+    >
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-[13.5px]">{titulo}</span>
+        {disabled && <span className="text-[10px] font-semibold text-muted-2 bg-white border border-border rounded-full px-2 py-[1px]">Em breve</span>}
+      </div>
       <div className="text-[11.5px] text-muted-2 mt-0.5">{desc}</div>
     </button>
   );
@@ -59,6 +67,7 @@ function CanvasAssinatura({ onVoltar, onConfirmar }) {
   const ref = useRef(null);
   const desenhando = useRef(false);
   const [temAssinatura, setTem] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     const c = ref.current; if (!c) return;
@@ -81,17 +90,32 @@ function CanvasAssinatura({ onVoltar, onConfirmar }) {
     const c = ref.current; c.getContext('2d').clearRect(0, 0, c.width, c.height); setTem(false);
   }
 
+  // Sobe o traço de verdade (canvas → blob → Storage privado, ver
+  // uploadAssinatura). Antes disso, o desenho era só descartado — a tela
+  // mudava de status, mas nada do que o cliente desenhou sobrevivia.
+  function confirmar() {
+    const c = ref.current;
+    setSalvando(true);
+    c.toBlob((blob) => {
+      setSalvando(false);
+      onConfirmar(blob);
+    }, 'image/png');
+  }
+
   return (
     <div>
-      <p className="text-[12.5px] text-muted mb-2">Assine no quadro abaixo:</p>
+      <p className="text-[12.5px] text-muted mb-2">
+        Peça para o cliente desenhar o aceite no quadro abaixo — é um registro visual, guardado
+        junto com o documento, sem valor de assinatura eletrônica avançada.
+      </p>
       <canvas ref={ref} width={400} height={150} className="w-full border border-border rounded-lg bg-[#FAFBFD] touch-none cursor-crosshair" />
       <div className="flex items-center justify-between mt-3">
         <button onClick={onVoltar} className="text-[12.5px] text-blue font-medium">Voltar</button>
         <div className="flex gap-2">
-          <button onClick={limpar} className="text-[12.5px] font-semibold text-muted border border-border rounded-lg px-3 py-2">Limpar</button>
-          <button onClick={onConfirmar} disabled={!temAssinatura}
-            className={['text-[13px] font-semibold px-4 py-2 rounded-lg text-white', temAssinatura ? 'bg-green hover:bg-[#126b34]' : 'bg-muted-2 cursor-not-allowed'].join(' ')}>
-            Confirmar assinatura
+          <button onClick={limpar} disabled={salvando} className="text-[12.5px] font-semibold text-muted border border-border rounded-lg px-3 py-2 disabled:opacity-60">Limpar</button>
+          <button onClick={confirmar} disabled={!temAssinatura || salvando}
+            className={['text-[13px] font-semibold px-4 py-2 rounded-lg text-white', temAssinatura && !salvando ? 'bg-green hover:bg-[#126b34]' : 'bg-muted-2 cursor-not-allowed'].join(' ')}>
+            {salvando ? 'Salvando…' : 'Confirmar aceite'}
           </button>
         </div>
       </div>

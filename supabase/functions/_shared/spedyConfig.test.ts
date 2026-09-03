@@ -6,8 +6,13 @@ import {
   montarPayloadEmpresa,
   resolverInscricaoEstadual,
   resolverEnvironmentType,
+  garantirAmbienteCoerente,
   prepararBlocosConfiguracao,
   montarPatchNota,
+  podeAplicarStatusWebhook,
+  certificadoValido,
+  camposFiscaisFaltando,
+  mensagemFalhaRedeSpedy,
 } from './spedyConfig';
 
 const lojaBase = {
@@ -78,6 +83,15 @@ describe('resolverEnvironmentType', () => {
     expect(resolverEnvironmentType(false, 'development')).toBe('development');
     expect(resolverEnvironmentType(true, 'homologacao')).toBe('development'); // não é do enum
     expect(resolverEnvironmentType(true, '')).toBe('development');
+
+    // TRAVA: 'production' dentro do sandbox e recusado, mesmo sendo do enum.
+    // A doc da Spedy avisa que essa combinacao emite nota com validade
+    // fiscal REAL a partir do ambiente de testes.
+    expect(() => resolverEnvironmentType(true, 'production')).toThrow(/sandbox/i);
+  });
+
+  it('em producao, production continua valido', () => {
+    expect(resolverEnvironmentType(false, 'production')).toBe('production');
   });
 });
 
@@ -175,8 +189,147 @@ describe('montarPatchNota', () => {
     expect(patch?.status).toBe('rejected');
   });
 
+  it('caso REJEITADA completo — o patch que o webhook grava em nota_fiscal', () => {
+    const eventoRejeitado = {
+      event: 'invoice.status_changed',
+      data: {
+        id: 'inv-abc-123',
+        status: 'rejected',
+        company: { federalTaxNumber: '12345678000190' },
+        processingDetail: { status: 'failed', message: 'Rejeicao: IE do emitente invalida', code: '209' },
+      },
+    };
+    const { invoiceId, patch } = montarPatchNota(eventoRejeitado);
+    expect(invoiceId).toBe('inv-abc-123');
+    expect(patch).toMatchObject({
+      status: 'rejected',
+      processing_status: 'failed',
+      processing_message: 'Rejeicao: IE do emitente invalida',
+      processing_code: '209',
+    });
+    // Sem authorization.protocol no evento — não pode aparecer no patch.
+    expect(patch).not.toHaveProperty('protocolo');
+  });
+
   it('evento sem data.id não gera patch (o webhook registra o erro e não atualiza nada)', () => {
     expect(montarPatchNota({ data: { status: 'authorized' } })).toEqual({ invoiceId: '', patch: null });
     expect(montarPatchNota(null)).toEqual({ invoiceId: '', patch: null });
+  });
+});
+
+
+describe('garantirAmbienteCoerente (trava sandbox x production)', () => {
+  it('recusa production quando a URL aponta para o sandbox', () => {
+    expect(() => garantirAmbienteCoerente(true, 'production', 'teste')).toThrow(/SANDBOX/);
+  });
+
+  it('menciona a origem no erro, para saber de onde veio o valor', () => {
+    expect(() => garantirAmbienteCoerente(true, 'production', 'resposta da Spedy'))
+      .toThrow(/resposta da Spedy/);
+  });
+
+  it('deixa passar as combinacoes legitimas', () => {
+    expect(() => garantirAmbienteCoerente(true, 'development', 'teste')).not.toThrow();
+    expect(() => garantirAmbienteCoerente(true, 'simulation', 'teste')).not.toThrow();
+    expect(() => garantirAmbienteCoerente(false, 'production', 'teste')).not.toThrow();
+    expect(() => garantirAmbienteCoerente(false, 'development', 'teste')).not.toThrow();
+  });
+});
+
+// ── Webhook: trava de evento fora de ordem ─────────────────────────────
+
+describe('podeAplicarStatusWebhook (trava de evento fora de ordem)', () => {
+  it('permite a progressão normal do pipeline', () => {
+    expect(podeAplicarStatusWebhook('created', 'enqueued')).toBe(true);
+    expect(podeAplicarStatusWebhook('enqueued', 'received')).toBe(true);
+    expect(podeAplicarStatusWebhook('received', 'authorized')).toBe(true);
+    expect(podeAplicarStatusWebhook('received', 'rejected')).toBe(true);
+  });
+
+  it('bloqueia rejeitada chegando depois de autorizada — o caso do pedido', () => {
+    expect(podeAplicarStatusWebhook('authorized', 'rejected')).toBe(false);
+  });
+
+  it('bloqueia autorizada chegando depois de rejeitada (mesma contradição, direção oposta)', () => {
+    expect(podeAplicarStatusWebhook('rejected', 'authorized')).toBe(false);
+  });
+
+  it('bloqueia um estágio anterior do pipeline chegando depois de um terminal (retry atrasado)', () => {
+    expect(podeAplicarStatusWebhook('authorized', 'enqueued')).toBe(false);
+    expect(podeAplicarStatusWebhook('authorized', 'received')).toBe(false);
+    expect(podeAplicarStatusWebhook('rejected', 'created')).toBe(false);
+  });
+
+  it('permite reenvio do mesmo status (idempotência — mesmo evento duas vezes)', () => {
+    expect(podeAplicarStatusWebhook('authorized', 'authorized')).toBe(true);
+    expect(podeAplicarStatusWebhook('rejected', 'rejected')).toBe(true);
+  });
+
+  it('permite transição administrativa legítima pós-autorização (cancelamento)', () => {
+    expect(podeAplicarStatusWebhook('authorized', 'canceled')).toBe(true);
+    expect(podeAplicarStatusWebhook('authorized', 'denied')).toBe(true);
+  });
+
+  it('sem status atual (nota nova / CNPJ sem loja correspondente) sempre aplica', () => {
+    expect(podeAplicarStatusWebhook(null, 'authorized')).toBe(true);
+    expect(podeAplicarStatusWebhook(undefined, 'enqueued')).toBe(true);
+  });
+
+  it('status desconhecido (fora do enum) nunca é bloqueado por excesso de zelo', () => {
+    expect(podeAplicarStatusWebhook('authorized', 'algum_status_novo_da_spedy')).toBe(true);
+  });
+});
+
+// ── Emissão: guardas de emitir() ────────────────────────────────────────
+
+describe('certificadoValido', () => {
+  it('bloqueia quando a loja nunca enviou certificado (credencial sem a marca de validade)', () => {
+    const r = certificadoValido({});
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.motivo).toMatch(/ainda não foi enviado/);
+  });
+
+  it('bloqueia quando o certificado enviado está vencido', () => {
+    const r = certificadoValido({ certificado_expira_em: '2020-01-01T00:00:00Z' }, '2026-08-31T00:00:00Z');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.motivo).toMatch(/vencido/);
+  });
+
+  it('passa quando o certificado está dentro da validade', () => {
+    const r = certificadoValido({ certificado_expira_em: '2027-01-01T00:00:00Z' }, '2026-08-31T00:00:00Z');
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('camposFiscaisFaltando', () => {
+  it('lista os três campos quando config_fiscal está ausente', () => {
+    expect(camposFiscaisFaltando(null)).toEqual(['ncm', 'cfop', 'icms']);
+    expect(camposFiscaisFaltando(undefined)).toEqual(['ncm', 'cfop', 'icms']);
+  });
+
+  it('lista só o que falta quando parcialmente preenchido', () => {
+    expect(camposFiscaisFaltando({ ncm: '87032310', cfop: 5102 })).toEqual(['icms']);
+    expect(camposFiscaisFaltando({ cfop: 5102, icms: { origin: 0, csosn: 400 } })).toEqual(['ncm']);
+  });
+
+  it('icms vazio ({}) conta como faltando, não como presente', () => {
+    expect(camposFiscaisFaltando({ ncm: '87032310', cfop: 5102, icms: {} })).toEqual(['icms']);
+  });
+
+  it('completo não lista nada', () => {
+    expect(camposFiscaisFaltando({ ncm: '87032310', cfop: 5102, icms: { origin: 0, csosn: 400 } })).toEqual([]);
+  });
+});
+
+describe('mensagemFalhaRedeSpedy', () => {
+  it('inclui o texto do erro original, sem inventar motivo', () => {
+    const msg = mensagemFalhaRedeSpedy(new Error('fetch failed: ECONNREFUSED'));
+    expect(msg).toMatch(/ECONNREFUSED/);
+    expect(msg).toMatch(/venda foi registrada normalmente/);
+  });
+
+  it('não quebra com um valor que não é Error', () => {
+    expect(() => mensagemFalhaRedeSpedy('timeout')).not.toThrow();
+    expect(mensagemFalhaRedeSpedy('timeout')).toMatch(/timeout/);
   });
 });

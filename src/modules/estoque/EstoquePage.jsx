@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Topbar } from '../../components/Layout';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
@@ -14,6 +14,8 @@ import FichaDocumentosModal from './FichaDocumentosModal';
 import FichaCarroModal from './FichaCarroModal';
 import { countDocs } from './demoDocs';
 import { gerarEstoquePdf } from './estoquePdf';
+import { canaisConectados, publicarEmCanal } from '../../integracoes/publicacoes';
+import { canalPorChave } from '../../integracoes/canais';
 
 const SIT = {
   estoque: { label: 'Estoque', cls: 'bg-green-soft text-green', dot: '#15803D' },
@@ -45,6 +47,11 @@ export default function EstoquePage() {
   const [fichaAlvo, setFichaAlvo] = useState(null);
   const [fichaCarroAlvo, setFichaCarroAlvo] = useState(null);
   const [comCapaCatalogo, setComCapaCatalogo] = useState(true);
+  const [canaisCx, setCanaisCx] = useState({}); // canais conectados p/ o checkbox do Add
+
+  useEffect(() => {
+    if (addOpen) canaisConectados({ demo, lojaId: loja?.id }).then(setCanaisCx);
+  }, [addOpen, demo, loja?.id]);
 
   const vendaPorVeiculo = useMemo(() => {
     const m = {};
@@ -84,9 +91,19 @@ export default function EstoquePage() {
   const nColunas = 12 + (ehDono ? 2 : 0) + (mode === 'venda' ? 2 : 0);
 
   async function onAddSave(dados) {
-    const { error } = await addVeiculo(dados);
+    const { publicarEm = [], ...resto } = dados; // publicarEm não é coluna do veículo
+    const { error, veiculo } = await addVeiculo(resto);
     setAddOpen(false);
     toast(error ? 'Erro ao salvar: ' + error.message : 'Veículo salvo no estoque');
+    if (error || !veiculo || !publicarEm.length) return;
+    // Publicações rodam em background (assíncrono, ADR-09): o save não espera
+    // portal nenhum; cada resultado chega por toast e fica no Publicar/status.
+    for (const canal of publicarEm) {
+      const nome = canalPorChave(canal)?.nome || canal;
+      publicarEmCanal({ demo, lojaId: loja?.id, veiculo, config: { assinatura_nome: loja?.nome }, canal })
+        .then((res) => toast(res.ok ? `Publicado no ${nome}` : `Erro ao publicar no ${nome}: ${res.erro}`))
+        .catch((e) => toast(`Erro ao publicar no ${nome}: ${e.message}`));
+    }
   }
   async function onMarcSave(texto, cor) {
     const { error } = await salvarMarcador(marcAlvo, texto, cor);
@@ -298,7 +315,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Modais */}
-      <AddVeiculoModal open={addOpen} ehDono={ehDono} onClose={() => setAddOpen(false)} onSave={onAddSave} />
+      <AddVeiculoModal open={addOpen} ehDono={ehDono} canaisConectados={canaisCx} onClose={() => setAddOpen(false)} onSave={onAddSave} />
       <MarcadorModal open={!!marcAlvo} veiculo={marcAlvo} onClose={() => setMarcAlvo(null)} onSave={onMarcSave} onClear={onMarcClear} />
       <RegistrarVendaModal open={!!vendaAlvo} veiculo={vendaAlvo} custos={vendaAlvo ? custosDe(vendaAlvo) : 0} equipe={equipe} ehDono={ehDono} onClose={() => setVendaAlvo(null)} onConfirm={onVendaConfirm} />
       <PublicarModal open={!!pubAlvo} veiculo={pubAlvo} config={{ assinatura_nome: loja?.nome }} onClose={() => setPubAlvo(null)} onToast={toast} />

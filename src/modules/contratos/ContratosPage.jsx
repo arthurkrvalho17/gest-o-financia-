@@ -5,7 +5,7 @@ import { useToast } from '../../components/Toast';
 import { fmt, ddmm } from '../../lib/format';
 import { IconContratos } from '../../components/icons';
 import { useContratos } from './useContratos';
-import { MODELOS, ORDEM_MODELOS, camposExtra } from './modelos';
+import { MODELOS, ORDEM_MODELOS, camposExtra, camposCliente } from './modelos';
 import { montarDados, exportarPdf, exportarDocx } from './gerarDocumento';
 import ModeloModal from './ModeloModal';
 import AssinaturaModal from './AssinaturaModal';
@@ -139,7 +139,8 @@ function Gerador({ ct, tipo, onVoltar }) {
   const toast = useToast();
   const modelo = MODELOS[tipo];
   const usandoModeloLoja = ct.modeloDe(tipo);
-  const [cliente, setCliente] = useState({ nome: '', cpf: '', telefone: '', nascimento: '' });
+  const [cliente, setCliente] = useState({ nome: '', cpf: '', telefone: '', nascimento: '', estado_civil: '', email: '', endereco: '', nacionalidade: '' });
+  const camposCli = camposCliente(tipo);
   const [veicId, setVeicId] = useState('');
   const [extra, setExtra] = useState({});
   const [assinaturaDoc, setAssinaturaDoc] = useState(null);
@@ -174,28 +175,31 @@ function Gerador({ ct, tipo, onVoltar }) {
     : null;
 
   async function gerar(modo) {
-    if (!cliente.nome.trim()) { toast('Informe o nome do cliente.'); return; }
+    const nomePrincipal = tipo === 'consignacao' ? (extra.consignante_nome || '').trim() : cliente.nome.trim();
+    if (!nomePrincipal) { toast(tipo === 'consignacao' ? 'Selecione o veículo consignado (razão social do consignante).' : 'Informe o nome do cliente.'); return; }
     const dataStr = new Date().toLocaleDateString('pt-BR');
     const conteudo = ct.conteudoAtivoDe(tipo);
     const dados = montarDados({ config: ct.config, cliente, veiculo: veiculoDoc, extra, dataStr });
     const tipoNome = modelo.nome;
-    const titulo = `${veiculoDoc?.modelo || 'Sem veículo'} · ${cliente.nome}`;
+    const titulo = `${veiculoDoc?.modelo || 'Sem veículo'} · ${nomePrincipal}`;
+    const clienteDoc = { ...cliente, nome: nomePrincipal };
     if (modo === 'docx') {
-      exportarDocx({ conteudo, dados, tipoNome, clienteNome: cliente.nome });
-      await ct.registrarDocumento({ tipo, cliente, veiculo: veiculoDoc, extra, titulo });
+      exportarDocx({ conteudo, dados, tipoNome, clienteNome: nomePrincipal });
+      await ct.registrarDocumento({ tipo, cliente: clienteDoc, veiculo: veiculoDoc, extra, titulo });
       toast('DOCX gerado — edite no Word antes de assinar');
       onVoltar();
       return;
     }
-    exportarPdf({ conteudo, dados, tipoNome, clienteNome: cliente.nome });
-    const { doc } = await ct.registrarDocumento({ tipo, cliente, veiculo: veiculoDoc, extra, titulo });
+    exportarPdf({ conteudo, dados, tipoNome, clienteNome: nomePrincipal });
+    const { doc } = await ct.registrarDocumento({ tipo, cliente: clienteDoc, veiculo: veiculoDoc, extra, titulo });
     setAssinaturaDoc(doc); // abre o fluxo de assinatura
   }
 
-  function concluirAssinatura(via) {
-    const { status } = ct.concluirAssinatura(assinaturaDoc, via, veiculoDoc);
+  async function concluirAssinatura(via, assinaturaBlob) {
+    const { status, error } = await ct.concluirAssinatura(assinaturaDoc, via, veiculoDoc, assinaturaBlob);
+    if (error) { toast(`Erro ao registrar o aceite: ${error.message}`); return; }
     setAssinaturaDoc(null);
-    toast(status === 'assinado' ? 'Assinado · guardado na ficha do carro' : 'Aguardando assinatura física · pendente na ficha');
+    toast(status === 'assinado' ? 'Aceite registrado com o documento' : 'Aguardando assinatura física · marcado como pendente');
     onVoltar();
   }
 
@@ -222,13 +226,20 @@ function Gerador({ ct, tipo, onVoltar }) {
                 <div className="text-[11.5px] text-amber bg-amber-soft rounded-lg px-3 py-2.5 mb-4 leading-snug">⚖️ {modelo.notaLegal}</div>
               )}
 
-              <Legenda>Cliente</Legenda>
-              <div className="grid grid-cols-2 gap-3">
-                <F label="Nome completo" full><I v={cliente.nome} on={(v) => setC('nome', v)} ph="Nome do cliente" /></F>
-                <F label="CPF"><I v={cliente.cpf} on={(v) => setC('cpf', v)} ph="000.000.000-00" /></F>
-                <F label="Telefone"><I v={cliente.telefone} on={(v) => setC('telefone', v)} ph="(00) 00000-0000" /></F>
-                <F label="Data de nascimento"><input type="date" value={cliente.nascimento} onChange={(e) => setC('nascimento', e.target.value)} className="inp" /></F>
-              </div>
+              {camposCli.length > 0 && (
+                <>
+                  <Legenda>{modelo.clienteTitulo || 'Cliente'}</Legenda>
+                  <div className="grid grid-cols-2 gap-3">
+                    {camposCli.map((c) => (
+                      <F key={c.key} label={c.label} full={c.full}>
+                        {c.date
+                          ? <input type="date" value={cliente[c.key] || ''} onChange={(e) => setC(c.key, e.target.value)} className="inp" />
+                          : <I v={cliente[c.key] || ''} on={(v) => setC(c.key, v)} ph={c.key === 'cpf' ? '000.000.000-00' : c.key === 'telefone' ? '(00) 00000-0000' : ''} />}
+                      </F>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <Legenda className="mt-[22px]">Veículo</Legenda>
               <F label="Selecione o carro do estoque" full>
@@ -262,7 +273,9 @@ function Gerador({ ct, tipo, onVoltar }) {
                       <F key={c.key} label={c.label} full={c.full || c.textarea}>
                         {c.textarea
                           ? <textarea value={extra[c.key] || ''} onChange={(e) => setE(c.key, e.target.value)} rows={2} className="inp resize-y" />
-                          : <I v={extra[c.key] || ''} on={(v) => setE(c.key, v)} ph={c.dinheiro ? 'R$ 0,00' : ''} cls={c.dinheiro ? 'num' : ''} />}
+                          : c.date
+                            ? <input type="date" value={extra[c.key] || ''} onChange={(e) => setE(c.key, e.target.value)} className="inp" />
+                            : <I v={extra[c.key] || ''} on={(v) => setE(c.key, v)} ph={c.dinheiro ? 'R$ 0,00' : ''} cls={c.dinheiro ? 'num' : ''} />}
                       </F>
                     ))}
                   </div>

@@ -198,7 +198,16 @@ supabase functions deploy ml-api
 supabase secrets set ML_CLIENT_ID=<app_id>
 supabase secrets set ML_CLIENT_SECRET=<secret_key>
 supabase secrets set ML_REDIRECT_URI=https://anoinhfivybufjmphmks.supabase.co/functions/v1/ml-oauth-callback
+# Para onde o ml-oauth-callback redireciona o navegador no fim do fluxo.
+# Sem este secret ele cai no default http://localhost:5173 e o usuario de
+# producao termina o OAuth numa pagina que nao existe.
+supabase secrets set FRONTEND_URL=<url do app em producao>
 echo "VITE_ML_APP_ID=<app_id>" >> .env.local
+
+# ml-webhook aceita qualquer POST sem isso (o ML não assina o payload).
+# Gere um valor aleatório, registre-o na notification URL do devcenter ML
+# (…/ml-webhook?token=<mesmo valor>) e só então configure o secret:
+supabase secrets set ML_WEBHOOK_TOKEN=<valor aleatório>
 ```
 
 ### Pré-requisitos externos
@@ -218,7 +227,7 @@ supabase/functions/ml-oauth-callback/index.ts
 ```
 
 Seguir o mesmo padrão de `olx-oauth-callback`:
-- Recebe `?code=` e `?state=` (state = `btoa(JSON.stringify({ loja_id }))`)
+- Recebe `?code=` e `?state=` (state = **nonce de uso unico** resolvido em `oauth_state` — ver `src/integracoes/oauthState.js`; o `btoa(JSON)` anterior era forjavel)
 - POST para `https://api.mercadolibre.com/oauth/token` com grant_type `authorization_code`
 - Salva `{ access_token, refresh_token, expires_in }` em `canal_credencial`
 - **Diferença do OLX:** ML retorna `refresh_token` — salvar junto e renovar automaticamente
@@ -228,19 +237,26 @@ Seguir o mesmo padrão de `olx-oauth-callback`:
 Seguir o mesmo padrão de `useOlxAuth.js`. Rota de auth ML:
 `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=...&redirect_uri=...&state=...`
 
-#### 3.3 Implementar `conectorMercadoLivre.js`
+#### 3.3 `conectorML.js` — feito, validado contra a API real
 
-```
-src/integracoes/mercado_livre/conectorMercadoLivre.js
-```
-
-Endpoints ML Classifieds (veículos):
+`src/integracoes/mercado_livre/conectorML.js` já implementa os 4 métodos do adapter:
 - `POST https://api.mercadolibre.com/items` — publicar
-- `PUT https://api.mercadolibre.com/items/{id}` — atualizar
+- `PUT https://api.mercadolibre.com/items/{id}` — atualizar (preço/fotos; título não é editável em classificados com visitas)
 - `PUT https://api.mercadolibre.com/items/{id}/status` com body `{ status: "closed" }` — despublicar
+- `GET https://api.mercadolibre.com/items/{id}` — status
 
-Atenção: ML exige `category_id` específico para veículos (ex: `MLB1744` para Carros e Utilitários/SP).
-Mapear `anuncio.combustivel`, `anuncio.cor` para os atributos ML.
+`category_id` fixo em `MLB1744` (Carros e Caminhonetes) — única categoria de veículos usados no
+Brasil, `buying_mode: 'classified'` (é o único modo que a categoria aceita).
+
+**Validação de atributos obrigatórios (`validarAnuncioML`, em `mapearCamposML.js`)** — no mesmo
+espírito do `conectorOlx.js`: conferida ao vivo em 30/08/2026 via
+`GET /categories/MLB1744/attributes`. Os 8 atributos `required=true` da categoria são
+`BRAND, MODEL, VEHICLE_TYPE, VEHICLE_YEAR, FUEL_TYPE, KILOMETERS, TRIM, DOORS` — a tabela
+completa (atributo × preenchido × origem) está no README, seção 8. `TRIM` (versão) e `DOORS`
+(portas) não tinham NENHUMA origem no cadastro até a migration `0023`: toda tentativa de
+publicar um veículo no ML falhava, sempre, nessa validação. Corrigido adicionando `versao`/
+`portas` em `veiculos` (`0023`), no formulário (`AddVeiculoModal.jsx`) e no anúncio canônico
+(`anuncioCanonico.js`).
 
 #### 3.4 Registrar no registry
 
@@ -257,10 +273,16 @@ const registry = {
 
 #### 3.5 Secrets
 
+> Os nomes abaixo sao os que o codigo LE de fato (`Deno.env.get`). Uma versao
+> anterior desta secao dizia `ML_APP_ID` / `ML_SECRET_KEY` — nomes que nenhuma
+> function consulta. Setados assim, o OAuth falha na troca do code por token,
+> sem mensagem obvia.
+
 ```bash
-supabase secrets set ML_APP_ID=<app_id>
-supabase secrets set ML_SECRET_KEY=<secret_key>
+supabase secrets set ML_CLIENT_ID=<app_id>
+supabase secrets set ML_CLIENT_SECRET=<secret_key>
 supabase secrets set ML_REDIRECT_URI=https://anoinhfivybufjmphmks.supabase.co/functions/v1/ml-oauth-callback
+supabase secrets set FRONTEND_URL=<url do app>   # para onde o callback redireciona
 echo "VITE_ML_APP_ID=<app_id>" >> .env.local
 ```
 
@@ -335,6 +357,11 @@ supabase secrets set WEBMOTORS_CLIENT_ID=<client_id>
 supabase secrets set WEBMOTORS_CLIENT_SECRET=<client_secret>
 # opcional, durante a homologação (URL de teste fornecida pela Sensedia):
 supabase secrets set WEBMOTORS_API_URL=<base_url_homologacao>
+
+# webmotors-webhook aceita qualquer POST sem isso. Gere um valor aleatório,
+# acrescente &token=<mesmo valor> nas duas Callback URLs do Cockpit e só
+# então configure o secret:
+supabase secrets set WEBMOTORS_WEBHOOK_TOKEN=<valor aleatório>
 ```
 
 ### Testar em localhost
@@ -598,7 +625,11 @@ em portal nenhum. Ver ADR-17 no README para a decisão e o porquê.
    `sandbox-app.spedy.com.br`; migre para produção só depois de validar uma emissão de ponta a
    ponta.
 2. Obter a chave de API da conta Owner: **Perfil → Minha Empresa → Credenciais da API**.
-3. **Confirmar com o contador de cada loja** os códigos tributários de venda de veículo usado
+3. **Antes de registrar o webhook na Spedy**, gere um valor aleatório, registre a URL já com
+   `?token=<mesmo valor>` e configure `supabase secrets set SPEDY_WEBHOOK_TOKEN=<valor aleatório>`
+   — sem isso, `spedy-webhook` aceita qualquer POST (não há confirmação de que a Spedy assine o
+   payload).
+4. **Confirmar com o contador de cada loja** os códigos tributários de venda de veículo usado
    (CFOP `5502`/`6502`, CSOSN/CST do ICMS, redução de base, PIS/COFINS) — o sistema nunca assume
    esses valores sozinho; ver o formato de `config_fiscal` comentado na migration `0019`.
 4. **DECISÃO EM ABERTO (Arthur) — responsável técnico da NF-e (infRespTec):** Financia+ assume
@@ -649,12 +680,53 @@ supabase secrets set SPEDY_OWNER_API_KEY=<chave_owner_da_conta_de_PRODUCAO>
 O webhook da Spedy é por **conta Owner**: registre uma vez só, recebe eventos de todas as lojas
 (o payload identifica a loja pelo CNPJ em `data.company.federalTaxNumber`).
 
+> ⚠️ A URL da API muda por ambiente e o bloco abaixo está no **sandbox**.
+> Registrar na conta errada é erro silencioso: com a chave de produção no
+> clipboard e este bloco na tela, o webhook vai parar em produção.
+
 ```bash
-curl -X POST https://api.spedy.com.br/v1/webhooks \
-  -H "X-Api-Key: <chave_da_conta_owner>" \
+# SANDBOX — use este durante os testes
+curl -X POST https://sandbox-api.spedy.com.br/v1/webhooks \
+  -H "X-Api-Key: <chave_owner_da_conta_SANDBOX>" \
   -H "Content-Type: application/json" \
   -d '{"event":"invoice.status_changed","url":"https://anoinhfivybufjmphmks.supabase.co/functions/v1/spedy-webhook"}'
+
+# PRODUÇÃO — só depois de validar a emissão de ponta a ponta no sandbox
+# curl -X POST https://api.spedy.com.br/v1/webhooks \
+#   -H "X-Api-Key: <chave_owner_da_conta_de_PRODUCAO>" \
+#   -H "Content-Type: application/json" \
+#   -d '{"event":"invoice.status_changed","url":"https://anoinhfivybufjmphmks.supabase.co/functions/v1/spedy-webhook"}'
 ```
+
+### Roteiro de teste manual no sandbox
+
+**Sem certificado (dá para fazer HOJE):**
+
+1. Criar a conta sandbox em `sandbox-app.spedy.com.br` (**cadastro novo** — Plano
+   Desenvolvedor; a conta de produção não vale aqui).
+2. Copiar a chave Owner do sandbox: **Perfil → Minha Empresa → Credenciais da API**.
+3. Setar os secrets de sandbox (os dois juntos — ver tabela de ambientes acima):
+   `SPEDY_API_URL=https://sandbox-api.spedy.com.br/v1` e `SPEDY_OWNER_API_KEY=<chave sandbox>`.
+4. Deploy: `supabase functions deploy spedy-api` e `supabase functions deploy
+   spedy-webhook --no-verify-jwt`; registrar o webhook na conta sandbox (curl abaixo,
+   trocando a URL da API pela do sandbox).
+5. Garantir que a loja de teste tem CNPJ e **Inscrição Estadual** (dígitos ou `ISENTO`)
+   no cadastro — sem isso o provisionamento é bloqueado de propósito.
+6. Ligar o complemento NF-e (Configurações → Assinatura/Plano) → roda `provisionar`,
+   que já chama `configurar` em seguida. Conferir na resposta `configurado: true` e
+   `environment_type: "development"` (Homologação — NUNCA production no sandbox).
+7. Colar o `config_fiscal` de teste no modal (JSON com CFOP/ICMS — valores de
+   homologação, não fiscais).
+
+**Exige o certificado A1 (quando chegar):**
+
+8. Enviar o `.pfx` + senha no modal (vai para a Spedy via `certificado`; o Financia+
+   não guarda o arquivo).
+9. Registrar uma venda de teste no Estoque → dispara `emitir` com
+   `environmentType: development` (nota de Homologação, sem validade fiscal).
+10. Conferir o status: o webhook `invoice.status_changed` deve atualizar `nota_fiscal`
+    (status `authorized`/`rejected`, número, protocolo); a action `consultar` cobre o
+    caso de o webhook não chegar.
 
 ### Fluxo de uso (lojista)
 

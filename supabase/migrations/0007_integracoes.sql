@@ -138,9 +138,9 @@ begin
     'canal_mensageria_credencial','contato','conversa','mensagem'
   ] loop
     execute format('alter table %I enable row level security;', t);
-    execute format('drop policy if exists %L on %I;', t || ' da minha loja', t);
+    execute format('drop policy if exists %I on %I;', t || ' da minha loja', t);
     execute format(
-      'create policy %L on %I for all using (loja_id = loja_do_usuario()) with check (loja_id = loja_do_usuario());',
+      'create policy %I on %I for all using (loja_id = loja_do_usuario()) with check (loja_id = loja_do_usuario());',
       t || ' da minha loja', t
     );
   end loop;

@@ -83,15 +83,46 @@ export function montarPayloadEmpresa(loja: Loja, emailDono?: string | null) {
 export const ENVIRONMENT_TYPES = ['production', 'development', 'simulation'] as const;
 export type EnvironmentType = (typeof ENVIRONMENT_TYPES)[number];
 
-// Default por ambiente. No sandbox o default NUNCA é 'production': a doc
-// avisa que é possível configurar production DENTRO do sandbox e a nota sai
-// com validade fiscal REAL. Override explícito via SPEDY_ENVIRONMENT_TYPE
-// (validado contra o enum; valor desconhecido cai no default seguro).
-export function resolverEnvironmentType(sandbox: boolean, override?: string | null): EnvironmentType {
-  if (override && (ENVIRONMENT_TYPES as readonly string[]).includes(override)) {
-    return override as EnvironmentType;
+// TRAVA DE SEGURANÇA: 'production' dentro do sandbox é proibido.
+//
+// A doc da Spedy avisa que dá para configurar environmentType 'production'
+// mesmo estando no sandbox — e aí a nota sai com validade fiscal REAL,
+// emitida contra a SEFAZ, no CNPJ da loja. Como o sandbox é onde se testa,
+// é exatamente onde uma emissão real é mais provável de acontecer por
+// engano e mais cara de desfazer (a saída é carta de correção ou
+// cancelamento, com prazo legal).
+//
+// Antes esta função só validava o override contra o enum, então
+// SPEDY_ENVIRONMENT_TYPE=production passava direto no sandbox. Agora a
+// combinação é recusada com erro explícito, em qualquer ponto do fluxo.
+export function garantirAmbienteCoerente(
+  sandbox: boolean,
+  environmentType: string,
+  origem: string,
+): void {
+  if (sandbox && environmentType === 'production') {
+    throw new Error(
+      `Ambiente incoerente (${origem}): SPEDY_API_URL aponta para o SANDBOX, mas o environmentType é 'production'. ` +
+        'Nessa combinação a Spedy emite nota com validade fiscal REAL a partir do ambiente de testes. ' +
+        "Corrija SPEDY_ENVIRONMENT_TYPE (use 'development' ou remova o secret) ou aponte SPEDY_API_URL para produção — " +
+        'os dois secrets devem ser trocados sempre juntos.',
+    );
   }
-  return sandbox ? 'development' : 'production';
+}
+
+// Default por ambiente. No sandbox o default NUNCA é 'production'. Override
+// explícito via SPEDY_ENVIRONMENT_TYPE (validado contra o enum; valor
+// desconhecido cai no default seguro; 'production' no sandbox é recusado).
+export function resolverEnvironmentType(sandbox: boolean, override?: string | null): EnvironmentType {
+  const resolvido: EnvironmentType =
+    override && (ENVIRONMENT_TYPES as readonly string[]).includes(override)
+      ? (override as EnvironmentType)
+      : sandbox
+        ? 'development'
+        : 'production';
+
+  garantirAmbienteCoerente(sandbox, resolvido, 'SPEDY_ENVIRONMENT_TYPE');
+  return resolvido;
 }
 
 type Settings = Record<string, unknown> & {
@@ -174,4 +205,99 @@ export function montarPatchNota(evento: Record<string, unknown> | null | undefin
     patch.processing_code = data.processingDetail.code;
   }
   return { invoiceId, patch };
+}
+
+// Ordem esperada do pipeline de uma NF-e (enum de nota_fiscal.status, 0018).
+// authorized/rejected têm o MESMO rank: são os dois resultados finais
+// POSSÍVEIS do mesmo processamento — nunca os dois juntos para o mesmo
+// invoiceId. canceled/denied/disabled/removed são ações administrativas
+// que só fazem sentido DEPOIS de autorizada.
+const RANK_STATUS: Record<string, number> = {
+  created: 0,
+  enqueued: 1,
+  received: 2,
+  inContingent: 3,
+  authorized: 4,
+  rejected: 4,
+  canceled: 5,
+  denied: 5,
+  disabled: 5,
+  removed: 5,
+};
+
+// Trava de evento fora de ordem: a Spedy pode reenviar (retry) um webhook
+// atrasado depois que um mais recente já chegou. Sem isso, uma nota já
+// AUTORIZADA podia voltar para 'rejected' (ou até para 'enqueued') só
+// porque a entrega chegou fora de ordem — dado fiscal errado gravado por
+// causa da rede, não da SEFAZ.
+//
+// Regra: bloqueia (a) qualquer regressão para um estágio de rank menor, e
+// (b) a troca entre os dois resultados finais contraditórios (authorized
+// ⇄ rejected) do mesmo invoiceId. Status desconhecido (fora do enum) nunca
+// é bloqueado por excesso de zelo — rank Infinity, sempre "avança".
+export function podeAplicarStatusWebhook(
+  statusAtual: string | null | undefined,
+  statusNovo: string | null | undefined,
+): boolean {
+  if (!statusNovo) return true;
+  if (!statusAtual || statusAtual === statusNovo) return true;
+
+  const rAtual = RANK_STATUS[statusAtual] ?? -1;
+  const rNovo = RANK_STATUS[statusNovo] ?? Infinity;
+
+  if (rNovo < rAtual) return false; // regressão para estágio anterior (retry atrasado)
+  if (rAtual === 4 && rNovo === 4) return false; // authorized ⇄ rejected: contradição
+  return true;
+}
+
+// ── Emissão (emitir): guardas antes de chamar a Spedy ────────────────────
+
+// Certificado A1: só sabemos se foi enviado porque certificado() grava a
+// validade devolvida pela Spedy em canal_credencial.credenciais (nunca o
+// arquivo nem a senha — ver comentário em spedy-api/index.ts). Sem essa
+// marca, a loja nunca enviou certificado nenhum.
+export function certificadoValido(
+  credenciais: Record<string, unknown> | null | undefined,
+  agoraISO: string = new Date().toISOString(),
+): { ok: true } | { ok: false; motivo: string } {
+  const expiraEm = credenciais?.certificado_expira_em as string | undefined;
+  if (!expiraEm) {
+    return {
+      ok: false,
+      motivo:
+        'O certificado digital A1 desta loja ainda não foi enviado. Vá em Configurações → Emissão de NF-e e envie o certificado antes de emitir.',
+    };
+  }
+  if (new Date(expiraEm).getTime() < new Date(agoraISO).getTime()) {
+    return {
+      ok: false,
+      motivo: `O certificado digital A1 desta loja está vencido desde ${new Date(expiraEm).toLocaleDateString('pt-BR')}. Envie um certificado novo em Configurações → Emissão de NF-e antes de emitir.`,
+    };
+  }
+  return { ok: true };
+}
+
+// Lista (não escolhe) os campos tributários que faltam em config_fiscal —
+// mesma regra de sempre: nenhum valor é inventado aqui, só apontamos o que
+// falta preencher com o contador.
+export function camposFiscaisFaltando(
+  configFiscal: Record<string, unknown> | null | undefined,
+): string[] {
+  const cf = configFiscal || {};
+  const faltando: string[] = [];
+  if (!cf.ncm) faltando.push('ncm');
+  if (!cf.cfop) faltando.push('cfop');
+  if (!cf.icms || typeof cf.icms !== 'object' || Object.keys(cf.icms as object).length === 0) {
+    faltando.push('icms');
+  }
+  return faltando;
+}
+
+// Mensagem para quando a Spedy está fora do ar / a chamada dá timeout —
+// erro de REDE (fetch rejeitado), não uma resposta HTTP com corpo de erro.
+// A venda já foi gravada antes deste ponto (emitir roda fire-and-forget
+// depois do insert em vendas) — este texto só explica a nota, nunca a venda.
+export function mensagemFalhaRedeSpedy(erro: unknown): string {
+  const bruto = String((erro as Error)?.message || erro || 'erro desconhecido');
+  return `Não foi possível falar com a Spedy agora (${bruto}). A venda foi registrada normalmente; a nota fiscal será reenviada quando o serviço voltar (rode a emissão de novo, ou aguarde a reconciliação automática).`;
 }

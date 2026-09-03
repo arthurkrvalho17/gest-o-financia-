@@ -33,6 +33,14 @@ export async function uploadLogo({ file, lojaId }) {
   return upload('logos-lojas', path, file);
 }
 
+// Traço desenhado na via "assinar no aparelho" — registro visual de
+// aceite, não uma assinatura eletrônica avançada. `blob` vem de
+// canvas.toBlob(); ver AssinaturaModal.jsx.
+export async function uploadAssinatura({ blob, lojaId, documentoId }) {
+  const path = `${lojaId}/${documentoId}/${uid()}.png`;
+  return upload('assinaturas', path, blob);
+}
+
 export async function deletarArquivo(bucket, path) {
   if (!path) return;
   await supabase.storage.from(bucket).remove([path]);

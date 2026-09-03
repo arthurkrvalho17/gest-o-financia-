@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos, demoVendas } from '../estoque/demoData';
-import { totalPrepDemo, allGastosDemo, gastosDemo, addGastoPreparacao, setStatusGastoDemo } from '../preparacao/demoPrep';
+import { totalPrepDemo, allGastosDemo, gastosDemo, addGastoPreparacao, updateGastoDemo } from '../preparacao/demoPrep';
 import { despesasDemo, setDespesasDemo, novaDespesaDemo, recriarFixasSeVazio } from './demoFin';
+import { anexarCompra } from '../../lib/veiculoValores';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
 
@@ -22,20 +23,22 @@ export function useFinanceiro() {
 
   const carregar = useCallback(async () => {
     if (demo) {
-      recriarFixasSeVazio(MES_ATUAL); // virada de mês: recria as fixas como pendentes
+      recriarFixasSeVazio(new Date().toISOString().slice(0, 7)); // virada de mês: recria as fixas como pendentes
       setVeiculos(demoVeiculos());
       setVendas(demoVendas());
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ data: vs }, { data: vd }, { data: gs }, { data: ds }] = await Promise.all([
+    const [{ data: vs, error: e1 }, { data: vd, error: e2 }, { data: gs, error: e3 }, { data: ds, error: e4 }] = await Promise.all([
       supabase.from('veiculos').select('*'),
       supabase.from('vendas').select('*'),
       supabase.from('preparacao_gastos').select('id, veiculo_id, valor, data, descricao, status'),
       supabase.from('despesas').select('*'),
     ]);
-    setVeiculos(vs || []);
+    const erroCarregar = e1 || e2 || e3 || e4;
+    if (erroCarregar) console.error('[Financia+] Erro ao carregar financeiro:', erroCarregar.message);
+    setVeiculos(await anexarCompra(vs || []));
     setVendas(vd || []);
     setPrepGastos(gs || []);
     setDespesas(ds || []);
@@ -132,6 +135,18 @@ export function useFinanceiro() {
     return { error };
   }
 
+  // Anexa/atualiza a nota fiscal de um gasto de preparação (mesma fonte da Preparação).
+  async function anexarNotaPrep(gasto, patch) {
+    if (demo) {
+      updateGastoDemo(gasto.codigo, gasto.id, patch);
+      setTick((t) => t + 1);
+      return { error: null };
+    }
+    const { error } = await supabase.from('preparacao_gastos').update(patch).eq('id', gasto.id);
+    if (!error) await carregar();
+    return { error };
+  }
+
   // ---- despesas (fixa/outra) ----
   const despesasDe = useCallback(
     (mes, categoria) => {
@@ -179,35 +194,10 @@ export function useFinanceiro() {
     return { error };
   }
 
-  // ---- Contas a pagar: visão filtrada (status pendente) do mês, sem duplicar dado ----
-  const contasAPagar = useCallback(
-    (mes) => {
-      const pend = (arr) => arr.filter((x) => x.status !== 'pago');
-      const itens = [
-        ...pend(despesasDe(mes, 'fixa')).map((x) => ({ ...x, categoria: 'Despesas fixas', fonte: 'fixa' })),
-        ...pend(despesasDe(mes, 'outra')).map((x) => ({ ...x, categoria: 'Outras despesas', fonte: 'outra' })),
-        ...gastosPrepDoMes(mes).filter((g) => g.status !== 'pago').map((g) => ({ ...g, descricao: `${g.descricao} (${g.carro})`, categoria: 'Preparação dos carros', fonte: 'prep' })),
-      ];
-      return itens;
-    },
-    [despesasDe, gastosPrepDoMes]
-  );
-
-  async function marcarPago(item, mes) {
-    if (item.fonte === 'prep') {
-      if (demo) { setStatusGastoDemo(item.codigo, item.id, 'pago'); setTick((t) => t + 1); return { error: null }; }
-      const { error } = await supabase.from('preparacao_gastos').update({ status: 'pago' }).eq('id', item.id);
-      if (!error) await carregar();
-      return { error };
-    }
-    return updateDespesa(mes, item.fonte, item, { status: 'pago' });
-  }
-
   return {
     demo, loading,
     custosDe, vendasDoMes, faturamentoDoMes, lucroPorCarroDoMes, preparacaoDoMes, gastosPrepDe,
-    gastosPrepDoMes, addGastoPrepForm, veiculos,
+    gastosPrepDoMes, addGastoPrepForm, anexarNotaPrep, veiculos,
     despesasDe, totalDespesas, addDespesa, updateDespesa, delDespesa,
-    contasAPagar, marcarPago,
   };
 }

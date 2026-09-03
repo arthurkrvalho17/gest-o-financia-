@@ -23,8 +23,22 @@ export default function FichaCarroModal({ open, veiculo, ehDono, custos = 0, con
     ['Fab/Mod', veiculo.fab_mod], ['Cor', veiculo.cor], ['Placa', veiculo.placa],
     ['RENAVAM', veiculo.renavam], ['Chassi', veiculo.chassi],
     ['Quilometragem', veiculo.km != null ? Number(veiculo.km).toLocaleString('pt-BR') + ' km' : null],
-    ['Combustível', veiculo.combustivel], ['Tipo', veiculo.tipo === 'consignado' ? 'Consignado' : 'Próprio'],
+    ['Combustível', veiculo.combustivel], ['Versão', veiculo.versao], ['Portas', veiculo.portas],
+    ['Tipo', veiculo.tipo === 'consignado' ? 'Consignado' : 'Próprio'],
     ['Entrada', ddmm(veiculo.entrada)], ['Situação', SIT[veiculo.situacao] || veiculo.situacao],
+    // RENAVE (ADR-16) — só aparecem quando preenchidos (dados.filter abaixo já
+    // esconde campo vazio, mesmo padrão do resto desta lista).
+    ['Ano fabricação', veiculo.ano_fabricacao], ['Ano modelo', veiculo.ano_modelo],
+    ['Código FIPE', veiculo.codigo_fipe], ['Chave NF-e de compra', veiculo.chave_nfe_compra],
+  ];
+
+  const temOrigemVeiculo = veiculo.vendedor_origem_nome || veiculo.vendedor_origem_cpf_cnpj || veiculo.vendedor_origem_logradouro;
+  const origemVeiculo = [
+    ['Nome/Razão social', veiculo.vendedor_origem_nome], ['CPF/CNPJ', veiculo.vendedor_origem_cpf_cnpj],
+    ['Endereço', [veiculo.vendedor_origem_logradouro, veiculo.vendedor_origem_numero].filter(Boolean).join(', ') || null],
+    ['Complemento', veiculo.vendedor_origem_complemento], ['Bairro', veiculo.vendedor_origem_bairro],
+    ['Cidade/UF', [veiculo.vendedor_origem_cidade, veiculo.vendedor_origem_uf].filter(Boolean).join('/') || null],
+    ['CEP', veiculo.vendedor_origem_cep],
   ];
 
   const valores = [
@@ -101,6 +115,20 @@ export default function FichaCarroModal({ open, veiculo, ehDono, custos = 0, con
       </div>
 
       {veiculo.descricao && <p className="text-[12.5px] text-muted mt-3 leading-relaxed">{veiculo.descricao}</p>}
+
+      {/* Origem do veículo — de quem a loja comprou (RENAVE, ADR-16) */}
+      {temOrigemVeiculo && (
+        <div className="mt-4">
+          <div className="text-[11.5px] font-bold text-muted uppercase tracking-[.04em] mb-2">Origem do veículo (de quem a loja comprou)</div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+            {origemVeiculo.filter(([, v]) => v).map(([k, v]) => (
+              <div key={k} className="flex justify-between border-b border-border/60 pb-1">
+                <span className="text-muted">{k}</span><span className="font-medium text-navy">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Documentos */}
       <div className="mt-4">

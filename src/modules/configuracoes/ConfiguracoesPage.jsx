@@ -44,6 +44,7 @@ export default function ConfiguracoesPage() {
   const [wmForm, setWmForm] = useState({ usuario: '', senha: '' });
   const [nfModal, setNfModal] = useState(false);
   const [certForm, setCertForm] = useState({ file: null, senha: '' });
+  const [certInfo, setCertInfo] = useState(null); // { expiraEm, titular, emissor, ativo } — depois do envio
   const [configFiscalTexto, setConfigFiscalTexto] = useState('');
 
   useEffect(() => {
@@ -89,9 +90,10 @@ export default function ConfiguracoesPage() {
   }
   async function enviarCertificadoSpedy() {
     if (!certForm.file || !certForm.senha) { toast('Selecione o arquivo .pfx e informe a senha'); return; }
-    const { error } = await spedy.enviarCertificado({ file: certForm.file, password: certForm.senha });
+    const { data, error } = await spedy.enviarCertificado({ file: certForm.file, password: certForm.senha });
     if (error) { toast(`Erro ao enviar certificado: ${error.message}`); return; }
     setCertForm({ file: null, senha: '' });
+    setCertInfo(data || null);
     toast('Certificado enviado');
   }
   async function salvarConfigFiscalSpedy() {
@@ -339,6 +341,20 @@ export default function ConfiguracoesPage() {
             <button onClick={enviarCertificadoSpedy} className="text-[12.5px] font-semibold text-white bg-blue hover:bg-blue-hover rounded-lg px-3.5 py-2 self-start">
               Enviar certificado
             </button>
+            {certInfo?.expiraEm && (() => {
+              const dias = Math.ceil((new Date(certInfo.expiraEm).getTime() - Date.now()) / 86400000);
+              const vence = new Date(certInfo.expiraEm).toLocaleDateString('pt-BR');
+              return (
+                <div className={['text-[12px] rounded-lg px-3 py-2', dias < 30 ? 'bg-amber-soft text-amber' : 'bg-green-soft text-green'].join(' ')}>
+                  <p>Certificado válido até <strong>{vence}</strong>{certInfo.titular ? ` — ${certInfo.titular}` : ''}.</p>
+                  {dias < 30 && (
+                    <p className="mt-0.5 font-semibold">
+                      Atenção: vence em {dias} dia{dias === 1 ? '' : 's'} — providencie a renovação com o contador/certificadora antes disso.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
         <div>

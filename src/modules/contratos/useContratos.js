@@ -5,6 +5,8 @@ import { demoVeiculos } from '../estoque/demoData';
 import { addDoc as addDocFicha } from '../estoque/demoDocs';
 import { getModeloLoja, conteudoAtivo, conteudoPadrao, salvarEditadoDemo, definirOrigemDemo, voltarPadraoDemo, enviarProprioDemo } from './demoModelos';
 import { getIdentidade } from '../../lib/lojaIdentidade';
+import { anexarCompra } from '../../lib/veiculoValores';
+import { uploadAssinatura } from '../../lib/storage';
 
 const docsDemoSeed = [
   { id: 'd1', tipo: 'compra_venda', cliente_nome: 'Sandra Mello', titulo: 'Honda Civic Touring · Sandra Mello', criado_em: '2026-06-08', assinatura_status: 'assinado', veiculo_codigo: '8147112' },
@@ -39,7 +41,7 @@ export function useContratos() {
       supabase.from('documentos').select('*').order('criado_em', { ascending: false }),
     ]);
     setConfig(cfg || { assinatura_nome: loja?.nome || '', assinatura_cnpj: '' });
-    setVeiculos(vs || []);
+    setVeiculos(await anexarCompra(vs || []));
     setDocumentos(ds || []);
     setLoading(false);
   }, [demo, lojaId, loja]);
@@ -70,16 +72,23 @@ export function useContratos() {
       setDocumentos((arr) => [doc, ...arr]);
       return { error: null, doc };
     }
-    const { error } = await supabase.from('documentos').insert({
-      loja_id: lojaId,
-      tipo,
-      veiculo_id: veiculo?.id || null,
-      cliente_nome: cliente.nome || null,
-      cliente_cpf: cliente.cpf || null,
-      dados: { ...extra, titulo },
-    });
+    const { data: doc, error } = await supabase
+      .from('documentos')
+      .insert({
+        loja_id: lojaId,
+        tipo,
+        veiculo_id: veiculo?.id || null,
+        cliente_nome: cliente.nome || null,
+        cliente_cpf: cliente.cpf || null,
+        dados: { ...extra, titulo },
+      })
+      .select()
+      .single();
+    // Achado (31/08-01/09/2026): faltava o .select().single() — sem o `doc`
+    // de volta, ContratosPage.gerar() fazia setAssinaturaDoc(undefined) e o
+    // modal de assinatura NUNCA abria fora do modo demo.
     if (!error) await carregar();
-    return { error };
+    return { error, doc };
   }
 
   // ---- Modelos da loja (Padrão FINANCIA+ × Seu modelo) ----
@@ -113,22 +122,39 @@ export function useContratos() {
     return null;
   }
 
-  // Fluxo de assinatura eletrônica (avançada, Lei 14.063/2020) via plataforma
-  // externa (ex.: ZapSign). Demo simula: nao_enviado → aguardando → assinado.
-  // Conclui a assinatura por uma das 3 vias. "impressao" fica Pendente (até anexar
-  // o físico); as demais ficam Assinado. Em qualquer caso, guarda na ficha do carro
-  // o PDF lacrado + a trilha de auditoria (regra jurídica: guardar sempre os dois).
-  function concluirAssinatura(doc, via, veiculo) {
+  // Registro de aceite do cliente por uma das 3 vias. HOJE isso é um
+  // registro INTERNO — sem identificação do signatário, hash do documento,
+  // carimbo de tempo ou log (nenhuma plataforma de assinatura eletrônica
+  // está integrada; achado de 31/08-01/09/2026, ver cérebro/Gestão). Nada
+  // aqui tem valor de assinatura eletrônica avançada nem gera trilha de
+  // auditoria de verdade.
+  // "impressao" fica Pendente (até anexar o físico); as demais ficam
+  // Assinado. Via "aparelho": se vier `assinaturaBlob` (o traço desenhado
+  // no canvas), sobe pro Storage privado — é só o registro visual do
+  // traço, guardado como tal, nunca prometido como mais que isso.
+  async function concluirAssinatura(doc, via, veiculo, assinaturaBlob) {
     const status = via === 'impressao' ? 'pendente' : 'assinado';
     const codigo = veiculo?.codigo || doc?.veiculo_codigo;
-    if (codigo) {
-      addDocFicha(codigo, { tipo: doc.tipo, nome_arquivo: 'documento-assinado.pdf', status });
-      if (status === 'assinado') addDocFicha(codigo, { tipo: 'outro', nome_arquivo: 'trilha-auditoria.pdf', status: 'anexado' });
-    }
+    if (codigo) addDocFicha(codigo, { tipo: doc.tipo, nome_arquivo: 'documento-assinado.pdf', status });
+
     if (demo) {
       setDocumentos((arr) => arr.map((d) => (d.id === doc.id ? { ...d, assinatura_status: status } : d)));
+      return { status };
     }
-    return { status };
+
+    let assinatura_imagem_path;
+    if (assinaturaBlob) {
+      const { path, error: erroUpload } = await uploadAssinatura({ blob: assinaturaBlob, lojaId, documentoId: doc.id });
+      if (erroUpload) return { error: erroUpload };
+      assinatura_imagem_path = path;
+    }
+
+    const { error } = await supabase
+      .from('documentos')
+      .update({ assinatura_status: status, ...(assinatura_imagem_path ? { assinatura_imagem_path } : {}) })
+      .eq('id', doc.id);
+    if (!error) await carregar();
+    return { error, status };
   }
 
   return {

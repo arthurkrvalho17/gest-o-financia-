@@ -515,9 +515,9 @@ begin
     'canal_mensageria_credencial','contato','conversa','mensagem'
   ] loop
     execute format('alter table %I enable row level security;', t);
-    execute format('drop policy if exists %L on %I;', t || ' da minha loja', t);
+    execute format('drop policy if exists %I on %I;', t || ' da minha loja', t);
     execute format(
-      'create policy %L on %I for all using (loja_id = loja_do_usuario()) with check (loja_id = loja_do_usuario());',
+      'create policy %I on %I for all using (loja_id = loja_do_usuario()) with check (loja_id = loja_do_usuario());',
       t || ' da minha loja', t
     );
   end loop;
@@ -659,3 +659,73 @@ drop policy if exists "regras da minha loja" on regra_distribuicao;
 create policy "regras da minha loja" on regra_distribuicao
   for all using (loja_id = loja_do_usuario()) with check (loja_id = loja_do_usuario());
 
+
+-- =====================================================================
+-- PARTE 14 — Nota fiscal anexável em qualquer despesa (migration 0012)
+-- =====================================================================
+alter table despesas          add column if not exists nota_fiscal_url text;
+alter table despesas          add column if not exists nota_fiscal_tipo text;  -- imagem | pdf
+alter table preparacao_gastos add column if not exists nota_fiscal_url text;
+alter table preparacao_gastos add column if not exists nota_fiscal_tipo text;
+
+-- Storage privado isolado por loja (caminho: <loja_id>/<arquivo>)
+insert into storage.buckets (id, name, public)
+values ('notas-fiscais', 'notas-fiscais', false)
+on conflict (id) do nothing;
+
+drop policy if exists "nf_select_own_loja" on storage.objects;
+create policy "nf_select_own_loja" on storage.objects for select
+  using (bucket_id = 'notas-fiscais' and (storage.foldername(name))[1] = loja_do_usuario()::text);
+drop policy if exists "nf_insert_own_loja" on storage.objects;
+create policy "nf_insert_own_loja" on storage.objects for insert
+  with check (bucket_id = 'notas-fiscais' and (storage.foldername(name))[1] = loja_do_usuario()::text);
+drop policy if exists "nf_update_own_loja" on storage.objects;
+create policy "nf_update_own_loja" on storage.objects for update
+  using (bucket_id = 'notas-fiscais' and (storage.foldername(name))[1] = loja_do_usuario()::text);
+drop policy if exists "nf_delete_own_loja" on storage.objects;
+create policy "nf_delete_own_loja" on storage.objects for delete
+  using (bucket_id = 'notas-fiscais' and (storage.foldername(name))[1] = loja_do_usuario()::text);
+
+-- =====================================================================
+-- FASE 13 — Cadastro completo: endereço e telefone na loja
+-- =====================================================================
+
+alter table lojas
+  add column if not exists telefone   text,
+  add column if not exists cep        text,
+  add column if not exists logradouro text,
+  add column if not exists bairro     text,
+  add column if not exists cidade     text,
+  add column if not exists uf         text;
+
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer
+set search_path = public as $$
+declare
+  nova_loja_id uuid;
+begin
+  insert into lojas (nome, cnpj, telefone, cep, logradouro, bairro, cidade, uf)
+  values (
+    coalesce(nullif(new.raw_user_meta_data->>'nome_loja', ''), 'Minha loja'),
+    nullif(new.raw_user_meta_data->>'cnpj', ''),
+    nullif(new.raw_user_meta_data->>'celular', ''),
+    nullif(new.raw_user_meta_data->>'cep', ''),
+    nullif(new.raw_user_meta_data->>'logradouro', ''),
+    nullif(new.raw_user_meta_data->>'bairro', ''),
+    nullif(new.raw_user_meta_data->>'cidade', ''),
+    nullif(new.raw_user_meta_data->>'uf', '')
+  )
+  returning id into nova_loja_id;
+
+  insert into usuarios (id, loja_id, nome, email, papel)
+  values (
+    new.id,
+    nova_loja_id,
+    nullif(new.raw_user_meta_data->>'nome', ''),
+    new.email,
+    'dono'
+  );
+
+  return new;
+end;
+$$;

@@ -87,11 +87,14 @@ Implementadas em [`src/modules/estoque/useEstoque.js`](src/modules/estoque/useEs
 5. **Permissões valem no front e no back.** Esconder no React não basta — a proteção também
    precisa existir no banco (ver seção 6).
 6. **Estoque interno nunca diverge silenciosamente do estoque legal (RENAVE).** Com a
-   Resolução CONTRAN nº 1.026/2026, entrada, saída e consignação de veículos usados devem ser
-   registradas eletronicamente no RENAVE (via integradora autorizada). Quando a loja estiver
-   habilitada, cada entrada/saída/consignação no sistema gera (ou exige) o registro
-   correspondente, e o status RENAVE fica visível por veículo — o sistema avisa divergências
-   (ex.: vender carro sem entrada registrada) em vez de escondê-las. Ver ADR-16.
+   Resolução CONTRAN nº 1.026/2026, entrada e saída de veículos usados devem ser registradas
+   eletronicamente no RENAVE — mas esse registro em si acontece no **painel da própria
+   integradora** (Renave Fácil), não no Financia+. O sistema alimenta o cadastro (cliente,
+   veículo) e a chave da NF-e, e **espelha** o status (`situacaoEstoqueRenave`) por veículo —
+   o objetivo continua sendo avisar divergência (ex.: vender carro sem entrada confirmada) em
+   vez de escondê-la, mas o Financia+ não é quem registra. Consignação não tem nenhum processo
+   eletrônico equivalente nessa integradora — segue só como controle comercial interno. Ver
+   ADR-16.
 
 ---
 
@@ -166,17 +169,26 @@ fora dela (só templates HSM).
 **Por quê:** permite plugar Instagram Direct e outros depois reusando o mesmo inbox, e respeita as
 regras da WhatsApp Business Platform desde o início.
 
-### ADR-11 — Assinatura eletrônica avançada via plataforma externa
-**Decisão:** o contrato é assinado pela loja, enviado ao cliente e devolvido como PDF lacrado +
-trilha de auditoria, guardados na ficha do carro. Não construímos criptografia — integra-se uma
-plataforma (ex.: ZapSign/ClickSign). A **ATPV-e** (transferência no Detran) é tratada como
-documento separado, **apenas guardado**.
-**Por quê:** a assinatura **avançada** (Lei 14.063/2020) é válida e vincula as partes para o
-contrato particular entre loja e cliente; é a auditoria que segura numa disputa. A transferência
+### ADR-11 — Aceite do cliente hoje é registro interno; assinatura eletrônica avançada é plano, não realidade
+**Decisão:** o plano sempre foi o contrato ser assinado pela loja, enviado ao cliente e
+devolvido como PDF lacrado + trilha de auditoria via uma plataforma externa (ex.:
+ZapSign/ClickSign) — não construir criptografia própria. **Correção (31/08-01/09/2026): essa
+integração nunca foi feita.** O que existe hoje (`AssinaturaModal.jsx`) é um registro interno de
+aceite — a via "aparelho" guarda o traço desenhado no canvas (imagem, Storage privado, sem
+identificação do signatário/hash/carimbo de tempo/log); a via "link" está desabilitada ("em
+breve") porque não há envio real; a via "impressão" só controla Pendente/anexado. Nada disso é
+assinatura eletrônica **avançada** (Lei 14.063/2020) — a UI não afirma mais isso. A **ATPV-e**
+(transferência no Detran) é tratada como documento separado, **apenas guardado**.
+**Por quê:** quando a plataforma de assinatura for integrada de verdade, a avançada (Lei
+14.063/2020) será válida e vinculará as partes para o contrato particular entre loja e cliente —
+é a auditoria que segura numa disputa. Até lá, é melhor um registro interno que se descreve
+honestamente do que uma tela afirmando uma proteção jurídica que não existe. A transferência
 oficial é ato com ente público (gov.br/ICP-Brasil) — não dá para prometer transferência automática.
-**Revisão (jul/2026):** com a obrigatoriedade do RENAVE (ADR-16), a ATPV-e de entrada/saída passa
-a ser emitida **dentro do fluxo eletrônico** via integradora — a premissa "ATPV-e apenas guardada"
-vale até o conector RENAVE entrar; depois, o sistema passa a intermediar a movimentação legal.
+**Revisão (jul/2026, corrigida 02/09/2026):** com a obrigatoriedade do RENAVE (ADR-16), a
+ATPV-e de entrada/saída passa a ser **espelhada** a partir da Renave Fácil (`GET
+/docs/atpve/entrada`/`saida`, quando disponível — não existe se a entrada usou CRV em papel,
+verde) em vez de só guardada manualmente. O Financia+ continua sem emitir nem intermediar a
+movimentação legal — só reflete o documento que a integradora já gerou no próprio painel dela.
 
 ### ADR-15 — Nota fiscal anexável em **qualquer despesa**, no Storage por loja
 **Decisão:** toda despesa (fixa, outra e gasto de preparação) aceita anexar a **nota fiscal**
@@ -213,24 +225,54 @@ texto; o lojista ainda pode editar e salvar "seu modelo" por cima (ADR-08), pres
 médio já aparece no Financeiro; o que faltava era saber **de onde vêm as vendas** para a loja
 decidir onde investir em anúncios. A métrica sai direto de `vendas.origem_lead`, sem dado novo.
 
-### ADR-16 — RENAVE como conector obrigatório do **estoque legal** — *previsto*
-**Decisão:** o registro eletrônico de entrada, saída e consignação no RENAVE entra como **mais um
-conector** da camada de integrações (ADR-09), via **integradora autorizada pela SENATRAN** —
-escolhida a **Renave Fácil** (API RESTful sobre o Renave-WS/SERPRO; autenticação por certificado
-digital; ambiente de homologação disponível) — com
-interface própria (`registrarEntrada / registrarSaida / registrarConsignacao / consultarStatus`).
-Estado por veículo×evento numa tabela `renave_registro` + fila assíncrona (mesmo padrão de
-`anuncio_publicacao`/`publicacao_job`); chamadas autenticadas por Edge Function (padrão `ml-api`);
-webhooks caem em `integracao_evento`. A habilitação (e-CNPJ/certificado digital) é **da loja**
-(princípio nº 2) — o Financia+ orquestra. No demo, conector mock. Com RENAVE ativo, RENAVAM e
-chassi passam a ser obrigatórios no cadastro do veículo.
-**Por quê:** a Resolução CONTRAN nº 1.026, de 26/06/2026, tornou o RENAVE o **único meio admitido**
-de registro de estoque de veículos (novos, usados e consignados), com prazo de adaptação de 90 dias
-(~set/2026). Sem o registro, o veículo não pode ser emplacado, transferido nem licenciado, e bancos
-não liberam financiamento. A consignação passa a exigir **contrato eletrônico registrado no próprio
-RENAVE com assinatura digital** — o modelo de consignação do sistema (ADR-14) continua como espelho
-comercial, mas **não substitui** o registro legal. RENAVE é requisito de operação do lojista, não
-diferencial: precisa entrar sem refatorar o núcleo — exatamente o que a camada de conectores permite.
+### ADR-16 — RENAVE: o Financia+ alimenta cadastro e espelha status, não orquestra o registro legal — *previsto*
+**Decisão (revisada 02/09/2026 — a versão original deste ADR estava errada em pontos
+estruturais; corrigida lendo a doc oficial direto, apidoc.renavefacil.net):** o RENAVE entra
+como **mais um conector** da camada de integrações (ADR-09), via **Renave Fácil**, mas o papel
+do Financia+ é **alimentar cadastro** (cliente e veículo, `POST/PUT/DELETE
+/dms/{cnpjEstab}/client` e `/vehicle`) e **enviar a chave da NF-e** já emitida (compra, venda
+ou transferência — `POST /dms/{cnpjEstab}/vehicle/nfe/{purchase|sales|transfer}`), e **espelhar**
+o status e os documentos que a própria Renave Fácil expõe só leitura (`GET
+/renave/{cnpjEstab}/docs/status`, `/docs/atpve/entrada`, `/docs/atpve/saida`, `/docs/crlve`) —
+**nunca "orquestrar" o registro legal**. A doc é textual sobre isso: *"A integração é apenas
+para envio de dados cadastrais de clientes, veículos e NF-e. Os processos RENAVE são feitos
+exclusivamente em nossa plataforma."* Abrir, acompanhar e assinar o registro acontece no painel
+da própria Renave Fácil, fora do Financia+.
+
+A Renave Fácil expõe um modelo de **Parceiro** (`POST /company` cria o estabelecimento — a
+loja — sob o parceiro; `GET /company/{cnpjEstab}/check` confirma), estruturalmente igual ao
+modelo **Owner** da Spedy (ADR-17): o Financia+ mantém a conta de parceiro (chave em secret do
+servidor, nunca em `canal_credencial`) e provisiona o estabelecimento de cada loja, em vez de
+cada loja se cadastrar sozinha na integradora — mesmo motivo do ADR-17: evitar o atrito de
+portal externo pela terceira vez. `canal_credencial` guarda, por loja, o `cnpjEstab` já
+provisionado (não uma chave própria). **Não existe ambiente de homologação/sandbox** — os
+testes acontecem direto na URL de produção (`https://api.renavefacil.net/v2/integration`),
+usando o CNPJ do próprio integrador como estabelecimento de teste.
+
+**Não existe webhook.** Todo acompanhamento é por leitura sob demanda — e a doc proíbe
+sincronização em massa: *"não é permitido o envio em massa de dados, o envio deve ser sob
+demanda"*; um cadastro sem processo RENAVE aberto por mais de 90 dias é apagado da base da
+Renave Fácil. Nenhum job varre o estoque inteiro; a consulta de status acontece atrelada a um
+evento real (venda registrada, tela aberta pelo lojista), nunca em lote.
+
+**Consignação não tem endpoint nenhum na Renave Fácil.** O modelo de consignação do sistema
+(ADR-14) continua só como espelho comercial — não existe (nem há previsão de existir) contrato
+eletrônico de consignação por essa integradora. `registrarEntrada/registrarSaida/
+registrarConsignacao` (a interface antiga deste ADR) não existem mais — a interface real é
+`sincronizarCliente/sincronizarVeiculo/enviarChaveNfeCompra/enviarChaveNfeVenda/
+enviarChaveNfeTransferencia/consultarStatus/baixarDocumento`. Estado por veículo×evento
+continua em `renave_registro` (`0017`, realinhada pela `0029`) — sem fila de webhook, porque
+não há o que a fila receberia. No demo, conector mock. Com RENAVE ativo, RENAVAM e chassi
+passam a ser obrigatórios no cadastro do veículo.
+**Por quê:** a Resolução CONTRAN nº 1.026, de 26/06/2026, tornou o RENAVE o **único meio
+admitido** de registro de estoque de veículos usados, com prazo de adaptação de 90 dias
+(~set/2026). Sem o registro, o veículo não pode ser emplacado, transferido nem licenciado, e
+bancos não liberam financiamento. Mas o **como** mudou entre a intenção original deste ADR e a
+leitura direta da doc da integradora: o Financia+ não é o sistema que registra no RENAVE — é o
+sistema que alimenta os dados que a Renave Fácil precisa pra fazer o registro (feito no painel
+dela) e espelha o resultado pro lojista ver sem abrir outro sistema. RENAVE é requisito de
+operação do lojista, não diferencial: precisa entrar sem refatorar o núcleo — exatamente o que
+a camada de conectores permite.
 
 ### ADR-17 — Emissão de NF-e via Spedy, Financia+ como empresa **Owner** — *previsto*
 **Decisão:** o `complemento_nf` (já previsto em `loja_plano`, sem spec até aqui) passa a significar
@@ -279,10 +321,13 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
 - `lojas` (`0018`) ganha campos fiscais exigidos pela Spedy (ADR-17): `numero` (do endereço),
   `cidade_ibge`, `inscricao_estadual`, `regime_tributario`, `cnae_principal`.
 
-**Estoque** (`0001`, `0006`, `0008`)
+**Estoque** (`0001`, `0006`, `0008`, `0023`, `0024`)
 - `veiculos` — `codigo, modelo, fab_mod, cor, placa, renavam, chassi, km, combustivel,
-  tipo (proprio|consignado), entrada, saida, situacao (estoque|reservado|vendido|repasse),
-  compra, pedido, minimo, descricao, marcador_texto, marcador_cor`.
+  versao, portas, tipo (proprio|consignado), entrada, saida,
+  situacao (estoque|reservado|vendido|repasse), compra, pedido, minimo, descricao,
+  marcador_texto, marcador_cor`. `versao`/`portas` (`0023`) existem só para alimentar os
+  atributos obrigatórios `TRIM`/`DOORS` da publicação no Mercado Livre (ver seção 8) —
+  sem eles a categoria de veículos do ML rejeita todo anúncio.
 - `vendas` — `veiculo_id, valor_venda, data_venda, comprador_nome, forma_pagamento, vendedor_id,
   observacao`. (Alimentam o desempenho de vendedores.)
 - `veiculo_documento` (`0008`) — ficha de documentos do carro (`tipo, arquivo_url,
@@ -331,11 +376,17 @@ em [`supabase/migrations/`](supabase/migrations) (e consolidadas em
   (status por veículo×canal), `publicacao_job` (fila).
 - Mensageria: `canal_mensageria_credencial` (WABA da loja), `contato`, `conversa`
   (`janela_24h_expira_em`), `mensagem`.
-- RENAVE (`0017` — ADR-16): `renave_registro` — evento legal por veículo (`evento
-  entrada|saida|consignacao, status pendente|registrado|erro|cancelado, protocolo, atpv_e_url,
-  dados (jsonb, auditoria), registrado_em`; 1 por veículo×evento) + `renave_job` (fila, mesmo
-  padrão de `publicacao_job`). Canal `renave` entra no catálogo `canal`; credencial da
-  integradora (Renave Fácil) por loja em `canal_credencial`.
+- RENAVE (`0017`+`0029` — ADR-16, revisado 02/09/2026): `renave_registro` — 1 linha por
+  veículo×evento (`evento entrada|saida` — **consignação não tem API, removida do enum**), com
+  o controle interno (`status pendente|registrado|erro|cancelado`, `protocolo`) e o espelho do
+  que a Renave Fácil expõe: `situacao` (situacaoEstoqueRenave: `S|T|C|X|V|E|I|''`),
+  `documentos_disponiveis` (jsonb — termoEntrada/atpvEntrada/crlv/termoSaida...),
+  `chave_nfe`+`dt_hr_processo`+`valor` (a NF-e enviada), `consultado_em` (última leitura de
+  status — nunca em lote, ver ADR-16). `renave_job` (fila, mesmo padrão de `publicacao_job`)
+  segue como estava, ainda sem uso (Fase B — Edge Function/polling não implementados). Canal
+  `renave` no catálogo `canal`; `canal_credencial` guarda, por loja, o `cnpjEstab` já
+  provisionado — a chave de autenticação é de **parceiro** (Financia+, modelo Owner igual
+  Spedy/ADR-17), em secret do servidor, nunca por loja.
 
 ---
 
@@ -358,8 +409,9 @@ Cada usuário tem `papel`. A regra (spec) e onde é aplicada:
   no rodapé da sidebar para visualizar as duas visões.
 - Cada funcionário cadastrado vira automaticamente uma **opção de vendedor** no Registrar venda.
 - **Defesa em profundidade no banco:** RLS é por linha; a proteção de **coluna** (esconder
-  `compra/minimo/lucro` do funcionário no próprio Postgres) usa a `view veiculos_funcionario`
-  (migration `0006`) — a implementação final liga quando o Supabase estiver conectado.
+  `compra` do funcionário no próprio Postgres — lucro nunca é coluna, é sempre calculado) usa a
+  `view veiculos_funcionario` (migration `0006`, atualizada na `0024` para acompanhar as colunas
+  que a tabela ganhou depois) — a implementação final liga quando o Supabase estiver conectado.
 
 ---
 
@@ -400,10 +452,12 @@ base: sidebar navy + topbar; rotas protegidas (sem sessão → login; sem Supaba
   contrato, recibo, procuração, CNH do comprador, comprovante, outro) com status
   anexado/assinado/pendente. A ATPV-e é só guardada — a transferência é no Detran
   (até o conector RENAVE entrar — ADR-16).
-- **RENAVE** (*previsto* — ADR-16): status do registro legal por veículo (entrada / saída /
-  consignação) visível na tabela e na ficha; cadastrar veículo e registrar venda disparam o
-  registro **assíncrono** via integradora (como a publicação em portais); aviso ao vender carro
-  sem entrada registrada; consignado exige o contrato eletrônico no RENAVE.
+- **RENAVE** (*previsto* — ADR-16, revisado 02/09/2026): status do registro legal por veículo
+  (entrada/saída — consignação não tem API) visível na tabela e na ficha; cadastrar veículo
+  sincroniza o cadastro e registrar venda envia a chave da NF-e — **assíncrono**, como a
+  publicação em portais, mas o registro em si é feito no painel da Renave Fácil, não aqui; o
+  sistema só espelha status/documentos sob demanda (nunca em job de fundo). Aviso ao vender
+  carro sem entrada confirmada.
 - **Desempenho dos vendedores** (só dono): destaque do mês, mês passado, total do mês;
   minimizável; histórico de ranking mês a mês (dados das vendas por `vendedor_id`).
 
@@ -477,12 +531,19 @@ Cada gasto aceita **anexar a nota fiscal** (foto/PDF) — "Anexar" / "Ver NF" (v
   "Enviar modelo próprio". Preservar o padrão é proposital (responsabilidade da edição é do lojista).
 - **Gerar PDF** (→ assinatura) e **Gerar DOCX editável** — mesmo motor de template
   ([`gerarDocumento.js`](src/modules/contratos/gerarDocumento.js)) preenchendo o modelo ativo.
-- **Assinatura eletrônica** (avançada, Lei 14.063/2020) em **3 vias**: assinar no aparelho (canvas),
-  enviar link (WhatsApp/e-mail) ou imprimir. O documento (assinado pela loja + cliente) vai para a
-  **ficha do carro** — Assinado, ou Pendente na via impressão. Plataforma externa (ZapSign) — hoje
-  simulada. A **ATPV-e** (Detran) é só guardada, sem promessa de transferência.
-- **Histórico**: atalho que abre todos os documentos gerados, agrupados por tipo, com busca por
-  cliente/carro/tipo/data (mesma fonte da ficha do carro).
+- **Aceite do cliente** em **3 vias** — hoje é registro INTERNO em `documentos.assinatura_status`,
+  sem assinatura eletrônica avançada nem trilha de auditoria (ver ADR-11): assinar no aparelho
+  (canvas, imagem salva no Storage privado, path em `documentos.assinatura_imagem_path`), enviar
+  link (**desabilitado, "em breve"** — não há envio real) ou imprimir (fica Pendente até anexar o
+  físico — esse anexo, sim, vai para a **ficha do carro**, via o fluxo real de
+  `FichaDocumentosModal`/`veiculo_documento`, que é uma tabela separada de `documentos`).
+  Plataforma externa de assinatura avançada (ex.: ZapSign) — **não integrada ainda**. A
+  **ATPV-e** (Detran) é só guardada, sem promessa de transferência.
+- **Histórico**: atalho que abre todos os documentos gerados (`documentos`), agrupados por tipo,
+  com busca por cliente/carro/tipo/data. *(Achado 31/08-01/09/2026: apesar do nome parecido,
+  `documentos` e `veiculo_documento`/ficha do carro são tabelas diferentes — um contrato
+  concluído aqui não aparece automaticamente na ficha do carro, só quando alguém anexa o
+  arquivo por lá manualmente.)*
 - **CRLV-e**: enviado no cadastro do veículo, fica guardado na ficha do carro.
 - **Documentos clicáveis** na ficha do carro: clicar abre a visualização (PDF/imagem no real;
   conteúdo nos gerados pelo sistema); remover é separado do clique.
@@ -503,12 +564,30 @@ Construída cedo para **não refatorar o núcleo** quando cada integração entr
 - **Fila + status**: publicar é assíncrono; cada veículo×canal tem status (pendente/publicado/
   erro/despublicado) e link, visível no modal **Publicar / status** do Estoque.
 - **Realidade de cada canal** (sinalizada na UI): Mercado Livre (API pública — 1º conector real
-  sugerido), OLX (Autoupload implementado: Edge Function `olx-api`, Catálogo de Autos
+  sugerido; atributos obrigatórios da categoria de veículos validados **antes** da chamada, com
+  todos os campos do cadastro cobertos desde a `0023` — ver DoD abaixo e INTEGRACOES.md §3), OLX
+  (Autoupload implementado: Edge Function `olx-api`, Catálogo de Autos
   obrigatório, moderação assíncrona com status `processando`, token de ~12h **sem refresh** —
   aguarda credenciais; ver INTEGRACOES.md §2), Webmotors (conector implementado — aguarda homologação Sensedia;
   credencial da loja = usuário "Integrador de API" do Cockpit), Instagram (Graph API
   no feed, exige app review; **Marketplace orgânico não tem API aberta — fora do escopo**),
   Agregador (uma API conecta vários — é só mais um conector).
+
+**DoD — atributos obrigatórios do Mercado Livre (categoria `MLB1744`, conferidos ao vivo em
+30/08/2026 via `GET /categories/MLB1744/attributes`)**: todos os 8 atributos `required=true` da
+categoria têm hoje uma origem no cadastro e são bloqueados em `validarAnuncioML`
+(`src/integracoes/mercado_livre/mapearCamposML.js`) antes de qualquer chamada à API.
+
+| Atributo ML | Preenchido | Origem |
+|---|---|---|
+| `BRAND` | ✅ | inferido de `veiculos.modelo` (`MARCA_POR_MODELO` / 1ª palavra) |
+| `MODEL` | ✅ | `veiculos.modelo` |
+| `VEHICLE_TYPE` | ✅ | fixo (`'Carros e caminhonetes'`) — categoria só tem esse valor |
+| `VEHICLE_YEAR` | ✅ | `veiculos.fab_mod` |
+| `FUEL_TYPE` | ✅ | `veiculos.combustivel` |
+| `KILOMETERS` | ✅ | `veiculos.km` |
+| `TRIM` (versão) | ✅ (`0023`) | `veiculos.versao` — **não existia até a `0023`**; toda publicação falhava |
+| `DOORS` (portas) | ✅ (`0023`) | `veiculos.portas` — **não existia até a `0023`**; toda publicação falhava |
 
 ### B. CRM → inbox de WhatsApp
 - Aba **Conversas** = inbox omnichannel (WhatsApp primeiro). Cada conversa é amarrada a um `lead`;
@@ -518,18 +597,27 @@ Construída cedo para **não refatorar o núcleo** quando cada integração entr
 - **Credenciais da loja**: cada loja tem o próprio WABA/número; o Financia+ orquestra (Meta direto
   ou via BSP). Adapter de mensageria com a mesma lógica de conector.
 
-### C. Estoque → RENAVE (estoque legal) — *previsto (ADR-16)*
-- **Obrigação legal**: Resolução CONTRAN nº 1.026/2026 — entrada, saída e consignação de veículos
-  registradas eletronicamente no RENAVE, via **integradora autorizada pela SENATRAN**; sem isso o
-  veículo não transfere/licencia e financiamentos não são pagos. Prazo de adaptação ~set/2026.
-- **Mesma anatomia dos outros canais**: conector com interface própria
-  (`registrarEntrada/registrarSaida/registrarConsignacao/consultarStatus`), fila + status por
-  veículo×evento (`renave_registro`), Edge Function autenticada (padrão `ml-api`), webhooks em
-  `integracao_evento`, credencial (e-CNPJ) **da loja** em `canal_credencial`, mock no demo.
-- **Pontos de disparo no núcleo**: `addVeiculo` (entrada), `registrarVenda` (saída) e o fluxo de
-  consignação — pontos únicos em `useEstoque.js`; o núcleo não conhece a integradora.
-- **Consignação**: contrato eletrônico assinado digitalmente **no próprio RENAVE**; o modelo do
-  sistema (ADR-14) é o espelho comercial. A ATPV-e passa a ser emitida no fluxo (revisão do ADR-11).
+### C. Estoque → RENAVE (estoque legal) — *previsto (ADR-16, revisado 02/09/2026)*
+- **Obrigação legal**: Resolução CONTRAN nº 1.026/2026 — entrada e saída de veículo usado
+  precisam de registro eletrônico no RENAVE; sem isso o veículo não transfere/licencia e
+  financiamentos não são pagos. Prazo de adaptação ~set/2026.
+- **O que o Financia+ faz de verdade**: alimenta cadastro (cliente, veículo) e envia a chave da
+  NF-e já emitida pra Renave Fácil; **não registra** entrada/saída/transferência — isso é feito
+  no painel da própria Renave Fácil. O sistema só espelha status (`GET /docs/status`) e
+  documentos disponíveis (ATPV-e/CRLV-e) sob demanda — nunca em job de fundo, a doc da
+  integradora proíbe sincronização em massa (cadastro sem processo aberto por >90 dias é
+  apagado da base dela).
+- **Interface do conector**: `sincronizarCliente/sincronizarVeiculo/enviarChaveNfeCompra/
+  enviarChaveNfeVenda/enviarChaveNfeTransferencia/consultarStatus/baixarDocumento` — sem
+  `registrarEntrada/Saida/Consignacao` (não existem na API) e sem webhook (não existe).
+- **Pontos de disparo no núcleo**: `addVeiculo` (sincroniza cadastro do veículo) e
+  `registrarVenda`/emissão de NF-e (envia a chave) — pontos únicos em `useEstoque.js`; o núcleo
+  não conhece a integradora.
+- **Consignação não tem API nenhuma na Renave Fácil.** Continua só o espelho comercial do
+  sistema (ADR-14) — sem contrato eletrônico via essa integradora.
+- **Owner/Parceiro**: mesmo modelo da Spedy (ADR-17) — o Financia+ provisiona o estabelecimento
+  de cada loja (`POST /company`) em vez de cada loja se cadastrar sozinha; sem ambiente de
+  homologação — os testes acontecem em produção, com o CNPJ do próprio integrador.
 
 ---
 
@@ -565,7 +653,7 @@ src/
 supabase/
 ├─ functions/      Edge Functions (ml-api, ml-oauth-callback, ml-webhook, olx-api,
 │                  olx-oauth-callback, webmotors-*, spedy-*)
-├─ migrations/     0000…0021 (uma por fase/rodada)
+├─ migrations/     0000…0024 (uma por fase/rodada)
 └─ setup.sql       consolidado ATÉ a 0012 — de 0013 em diante, rode as migrations
 ```
 
@@ -585,10 +673,13 @@ aguardando credenciais/homologação: Mercado Livre, OLX, Webmotors, Spedy.
 - **OLX**: credenciais (e-mail a suporteintegrador@olxbr.com), deploy de `olx-api` +
   `olx-oauth-callback`, migrations `0020`/`0021` — código pronto e testado por mock
   (INTEGRACOES.md §2).
-- **RENAVE (ADR-16 — prazo de adaptação do mercado ~set/2026)**: integradora escolhida
-  (**Renave Fácil**) e migration pronta (`0017` — `renave_registro` + `renave_job`); falta:
-  conta/credenciais + homologação na integradora, conector + Edge Function, status no Estoque,
-  consignação com contrato eletrônico no RENAVE, RENAVAM/chassi obrigatórios com RENAVE ativo.
+- **RENAVE (ADR-16, revisado 02/09/2026 — prazo de adaptação do mercado ~set/2026)**:
+  integradora escolhida (**Renave Fácil**); migrations `0017`+`0029` prontas (`renave_registro`
+  alinhado ao papel real: alimentar cadastro + chave de NF-e + espelhar status/documentos, sem
+  webhook, sem consignação); conector `conectorRenave.js` pronto e testado por mock; falta:
+  conta de **parceiro** na Renave Fácil (sem sandbox — testa-se direto em produção), Edge
+  Function `renave-api`, job/UI de status no Estoque (Fase B), RENAVAM/chassi obrigatórios com
+  RENAVE ativo.
 - **Emissão de NF-e — Spedy (ADR-17)**: fornecedor escolhido; migration pronta (`0018` —
   campos fiscais em `lojas` + tabela `nota_fiscal` + canal `spedy`); falta: conta **Owner** da
   Spedy (Financia+, sandbox primeiro), Edge Function de provisionamento de sub-empresa + emissão
@@ -647,7 +738,7 @@ npm run dev        # http://localhost:5173  (abre em modo demonstração)
    VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
    VITE_SUPABASE_ANON_KEY=sua-anon-public-key
    ```
-4. No **SQL Editor**, rode as migrations `0000`…`0021` de `supabase/migrations/` na ordem.
+4. No **SQL Editor**, rode as migrations `0000`…`0024` de `supabase/migrations/` na ordem.
    (`setup.sql` consolida só até a `0012` — se usá-lo, complete com as migrations `0013`+.)
 5. Para testar rápido: em **Authentication → Providers → Email**, desligue *"Confirm email"*.
 6. Reinicie o `npm run dev`.

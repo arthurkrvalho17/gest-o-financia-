@@ -57,7 +57,7 @@ export function useSpedyAuth() {
   async function enviarCertificado({ file, password }) {
     setErro('');
     const fileBase64 = await fileToBase64(file);
-    const { error } = await supabase.functions.invoke('spedy-api', {
+    const { data, error } = await supabase.functions.invoke('spedy-api', {
       body: { action: 'certificado', fileBase64, filename: file.name, password },
     });
     if (error) {
@@ -65,7 +65,8 @@ export function useSpedyAuth() {
       setErro(msg);
       return { error: new Error(msg) };
     }
-    return { error: null };
+    // data: { ok, expiraEm, titular, emissor, ativo } — nunca o arquivo/senha.
+    return { error: null, data };
   }
 
   async function salvarConfigFiscal(configFiscal) {

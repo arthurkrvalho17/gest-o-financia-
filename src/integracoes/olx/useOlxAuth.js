@@ -1,19 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
+import { criarOauthState } from '../oauthState';
 
 const OLX_AUTH_URL = 'https://auth.olx.com.br/oauth';
-// Mesma janela do authorization code da OLX (10 min)
-const STATE_TTL_MS = 10 * 60 * 1000;
 
 function getRedirectUri() {
   return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olx-oauth-callback`;
 }
-
-const gerarNonce = () =>
-  globalThis.crypto?.randomUUID
-    ? crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
-    : Array.from({ length: 4 }, () => Math.random().toString(36).slice(2)).join('');
 
 export function useOlxAuth() {
   const { loja } = useAuth();
@@ -65,13 +59,7 @@ export function useOlxAuth() {
       return;
     }
 
-    const nonce = gerarNonce();
-    const { error } = await supabase.from('oauth_state').insert({
-      nonce,
-      loja_id: lojaId,
-      canal: 'olx',
-      expira_em: new Date(Date.now() + STATE_TTL_MS).toISOString(),
-    });
+    const { nonce, error } = await criarOauthState(lojaId, 'olx');
     if (error) {
       setErroConexao(`Não foi possível iniciar a conexão OLX: ${error.message}`);
       return;

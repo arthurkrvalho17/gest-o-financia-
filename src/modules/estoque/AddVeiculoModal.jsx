@@ -1,20 +1,36 @@
 import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 import { parseBR } from '../../lib/format';
+import { CANAIS_ANUNCIO } from '../../integracoes/canais';
+import { parseFabMod } from '../../lib/veiculoAno';
+import { validarCamposRenave } from './validacaoRenave';
+import { buscarCep } from '../../lib/cep';
 
 const VAZIO = {
   codigo: '', modelo: '', fab_mod: '', cor: '', placa: '', renavam: '', chassi: '', km: '',
-  combustivel: '', tipo: 'proprio', compra: '', pedido: '', minimo: '', descricao: '',
+  combustivel: '', versao: '', portas: '', tipo: 'proprio', compra: '', pedido: '', minimo: '', descricao: '',
   consignante_nome: '', consignante_cnpj: '', consignante_tel: '', consignante_endereco: '',
+  // RENAVE (ADR-16) — ano_fabricacao/ano_modelo autopreenchidos a partir de
+  // fab_mod (ao sair do campo), mas continuam editáveis por cima.
+  ano_fabricacao: '', ano_modelo: '', codigo_fipe: '', chave_nfe_compra: '',
+  // Origem do veículo — de quem a loja comprou (alimenta client + nfe/purchase
+  // da Renave Fácil quando o RENAVE estiver ativo; opcional do contrário).
+  vendedor_origem_nome: '', vendedor_origem_cpf_cnpj: '',
+  vendedor_origem_cep: '', vendedor_origem_logradouro: '', vendedor_origem_numero: '',
+  vendedor_origem_complemento: '', vendedor_origem_bairro: '', vendedor_origem_cidade: '', vendedor_origem_uf: '',
 };
 
-export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }) {
+export default function AddVeiculoModal({ open, ehDono = true, canaisConectados = {}, onClose, onSave }) {
   const [f, setF] = useState(VAZIO);
-  const [fotos, setFotos] = useState([]); // {url, nome} — a primeira é a capa
+  const [fotos, setFotos] = useState([]); // {file, url, nome} — a primeira é a capa
   const [dragIdx, setDragIdx] = useState(null);
   const [crlv, setCrlv] = useState(null); // nome do arquivo CRLV-e anexado
+  const [publicarEm, setPublicarEm] = useState([]); // canais marcados para publicar ao salvar
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+  const [buscandoCepOrigem, setBuscandoCepOrigem] = useState(false);
+  const [erroCepOrigem, setErroCepOrigem] = useState('');
+  const renaveAtivo = !!canaisConectados.renave;
 
   function moverFoto(from, to) {
     if (from === to || from == null || to == null) return;
@@ -31,6 +47,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       setF(VAZIO);
       setFotos([]);
       setCrlv(null);
+      setPublicarEm([]);
       setErro('');
       setAviso('');
     }
@@ -39,13 +56,49 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   function addFotos(fileList) {
-    const novas = Array.from(fileList || []).map((file) => ({ url: URL.createObjectURL(file), nome: file.name }));
+    const novas = Array.from(fileList || []).map((file) => ({ file, url: URL.createObjectURL(file), nome: file.name }));
     setFotos((arr) => [...arr, ...novas]);
+  }
+
+  // Deriva ano_fabricacao/ano_modelo de fab_mod ao sair do campo — só
+  // preenche se o lojista ainda não tiver digitado nada nos dois (nunca
+  // sobrescreve um ajuste manual).
+  function handleFabModBlur() {
+    if (f.ano_fabricacao || f.ano_modelo) return;
+    const { anoFabricacao, anoModelo } = parseFabMod(f.fab_mod);
+    if (anoFabricacao) set('ano_fabricacao', String(anoFabricacao));
+    if (anoModelo) set('ano_modelo', String(anoModelo));
+  }
+
+  async function handleCepOrigemBlur() {
+    const digitos = f.vendedor_origem_cep.replace(/\D/g, '');
+    if (digitos.length !== 8) return;
+    setBuscandoCepOrigem(true);
+    setErroCepOrigem('');
+    const r = await buscarCep(digitos);
+    setBuscandoCepOrigem(false);
+    if (r.erro) { setErroCepOrigem(r.erro); return; }
+    set('vendedor_origem_logradouro', r.logradouro);
+    set('vendedor_origem_bairro', r.bairro);
+    set('vendedor_origem_cidade', r.cidade);
+    set('vendedor_origem_uf', r.uf);
   }
 
   function salvar() {
     if (!f.modelo.trim()) {
       setErro('Informe ao menos o modelo do veículo.');
+      return;
+    }
+    const candidato = {
+      placa: f.placa.trim(),
+      renavam: f.renavam.trim(),
+      chassi: f.chassi.trim(),
+      ano_fabricacao: parseInt(f.ano_fabricacao, 10) || null,
+      ano_modelo: parseInt(f.ano_modelo, 10) || null,
+    };
+    const erroRenave = validarCamposRenave(candidato, renaveAtivo);
+    if (erroRenave) {
+      setErro(erroRenave);
       return;
     }
     onSave({
@@ -58,7 +111,25 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       chassi: f.chassi.trim() || null,
       km: parseInt(String(f.km).replace(/\D/g, ''), 10) || null,
       combustivel: f.combustivel.trim() || null,
+      versao: f.versao.trim() || null,
+      portas: parseInt(String(f.portas).replace(/\D/g, ''), 10) || null,
       tipo: f.tipo,
+      // RENAVE (ADR-16): dados de fabricação/FIPE/NF-e de compra e origem do
+      // veículo — nunca obrigatórios no banco; só validados acima quando a
+      // loja tem o canal RENAVE conectado.
+      ano_fabricacao: candidato.ano_fabricacao,
+      ano_modelo: candidato.ano_modelo,
+      codigo_fipe: f.codigo_fipe.trim() || null,
+      chave_nfe_compra: f.chave_nfe_compra.trim() || null,
+      vendedor_origem_nome: f.vendedor_origem_nome.trim() || null,
+      vendedor_origem_cpf_cnpj: f.vendedor_origem_cpf_cnpj.trim() || null,
+      vendedor_origem_cep: f.vendedor_origem_cep.replace(/\D/g, '') || null,
+      vendedor_origem_logradouro: f.vendedor_origem_logradouro.trim() || null,
+      vendedor_origem_numero: f.vendedor_origem_numero.trim() || null,
+      vendedor_origem_complemento: f.vendedor_origem_complemento.trim() || null,
+      vendedor_origem_bairro: f.vendedor_origem_bairro.trim() || null,
+      vendedor_origem_cidade: f.vendedor_origem_cidade.trim() || null,
+      vendedor_origem_uf: f.vendedor_origem_uf.trim() || null,
       compra: ehDono ? parseBR(f.compra) : 0,
       pedido: parseBR(f.pedido),
       minimo: parseBR(f.minimo),
@@ -68,8 +139,9 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
       consignante_cnpj: f.tipo === 'consignado' ? f.consignante_cnpj.trim() || null : null,
       consignante_tel: f.tipo === 'consignado' ? f.consignante_tel.trim() || null : null,
       consignante_endereco: f.tipo === 'consignado' ? f.consignante_endereco.trim() || null : null,
-      fotos: fotos.map((x, i) => ({ url: x.url, nome: x.nome, ordem: i })),
-      crlv, // nome do arquivo CRLV-e (guardado na ficha do carro)
+      fotos: fotos.map((x, i) => ({ file: x.file || null, url: x.url, nome: x.nome, ordem: i })),
+      crlv, // {file, name} do CRLV-e (useEstoque faz o upload)
+      publicarEm, // canais para publicar após salvar (assíncrono, status por canal)
     });
   }
 
@@ -100,7 +172,7 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
           {crlv ? 'CRLV-e anexado ✓' : 'Enviar CRLV-e (PDF)'}
           <input type="file" accept="application/pdf" className="hidden" onChange={(e) => {
             const file = e.target.files?.[0]; if (!file) return;
-            setCrlv(file.name);
+            setCrlv({ file, name: file.name });
             setAviso('CRLV-e anexado — será guardado na ficha do carro. (A leitura automática dos campos entra em breve; preencha manualmente por ora.)');
           }} />
         </label>
@@ -111,11 +183,20 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
         <F label="Modelo" full><I v={f.modelo} on={(v) => set('modelo', v)} ph="Ex: Corolla GLI Flex" /></F>
         <F label="Placa"><I v={f.placa} on={(v) => set('placa', v)} ph="ABC1D23" /></F>
         <F label="RENAVAM"><I v={f.renavam} on={(v) => set('renavam', v)} ph="00000000000" /></F>
-        <F label="Fab/Modelo"><I v={f.fab_mod} on={(v) => set('fab_mod', v)} ph="2021/2022" /></F>
+        <F label="Fab/Modelo">
+          <input value={f.fab_mod} onChange={(e) => set('fab_mod', e.target.value)} onBlur={handleFabModBlur} placeholder="2021/2022"
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </F>
         <F label="Cor"><I v={f.cor} on={(v) => set('cor', v)} ph="Prata" /></F>
         <F label="Chassi"><I v={f.chassi} on={(v) => set('chassi', v)} ph="9BW..." /></F>
         <F label="Quilometragem"><I v={f.km} on={(v) => set('km', v)} ph="0" cls="num" /></F>
+        <F label={`Ano de fabricação${renaveAtivo ? ' *' : ''}`}><I v={f.ano_fabricacao} on={(v) => set('ano_fabricacao', v)} ph="2021" cls="num" /></F>
+        <F label={`Ano modelo${renaveAtivo ? ' *' : ''}`}><I v={f.ano_modelo} on={(v) => set('ano_modelo', v)} ph="2022" cls="num" /></F>
+        <F label="Código FIPE"><I v={f.codigo_fipe} on={(v) => set('codigo_fipe', v)} ph="opcional" /></F>
+        <F label="Chave da NF-e de compra"><I v={f.chave_nfe_compra} on={(v) => set('chave_nfe_compra', v)} ph="opcional — se já tiver a nota" /></F>
         <F label="Combustível"><I v={f.combustivel} on={(v) => set('combustivel', v)} ph="Flex" /></F>
+        <F label="Versão"><I v={f.versao} on={(v) => set('versao', v)} ph="Ex: GLI, XEI 2.0" /></F>
+        <F label="Portas"><I v={f.portas} on={(v) => set('portas', v)} ph="4" cls="num" /></F>
         <F label="Código"><I v={f.codigo} on={(v) => set('codigo', v)} ph="opcional" /></F>
         <F label="Tipo">
           <select value={f.tipo} onChange={(e) => set('tipo', e.target.value)}
@@ -147,6 +228,30 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
         </div>
       )}
 
+      {/* Origem do veículo — de quem a loja comprou (RENAVE, ADR-16: alimenta
+          client + nfe/purchase quando o canal RENAVE estiver conectado).
+          Sempre opcional aqui — sem RENAVE ativo, nada disso é obrigatório. */}
+      <div className="mt-3.5 border border-border rounded-lg p-3.5 bg-[#FAFBFD]">
+        <div className="text-[11.5px] font-bold text-muted uppercase tracking-[.04em] mb-2.5">Origem do veículo (de quem a loja comprou)</div>
+        <div className="grid grid-cols-2 gap-3">
+          <F label="Nome/Razão social" full><I v={f.vendedor_origem_nome} on={(v) => set('vendedor_origem_nome', v)} ph="Vendedor anterior" /></F>
+          <F label="CPF/CNPJ"><I v={f.vendedor_origem_cpf_cnpj} on={(v) => set('vendedor_origem_cpf_cnpj', v)} ph="000.000.000-00" /></F>
+          <F label="CEP">
+            <input value={f.vendedor_origem_cep} onChange={(e) => set('vendedor_origem_cep', e.target.value)} onBlur={handleCepOrigemBlur}
+              className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+            {buscandoCepOrigem && <span className="text-[11px] text-muted-2">Buscando endereço…</span>}
+            {erroCepOrigem && <span className="text-[11px] text-red">{erroCepOrigem}</span>}
+          </F>
+          <F label="Número"><I v={f.vendedor_origem_numero} on={(v) => set('vendedor_origem_numero', v)} /></F>
+          <F label="Logradouro" full><I v={f.vendedor_origem_logradouro} on={(v) => set('vendedor_origem_logradouro', v)} ph="Preenchido automaticamente pelo CEP" /></F>
+          <F label="Complemento"><I v={f.vendedor_origem_complemento} on={(v) => set('vendedor_origem_complemento', v)} ph="opcional" /></F>
+          <F label="Bairro"><I v={f.vendedor_origem_bairro} on={(v) => set('vendedor_origem_bairro', v)} /></F>
+          <F label="Cidade"><I v={f.vendedor_origem_cidade} on={(v) => set('vendedor_origem_cidade', v)} /></F>
+          <F label="UF"><I v={f.vendedor_origem_uf} on={(v) => set('vendedor_origem_uf', v)} ph="SP" /></F>
+        </div>
+        <p className="text-[11px] text-muted-2 mt-2">Opcional — usado para o cadastro de entrada no RENAVE quando o canal estiver conectado.</p>
+      </div>
+
       {/* Fotos — arraste para reordenar; a primeira é a capa */}
       <div className="mt-3.5">
         <label className="text-[11.5px] font-semibold text-muted">Fotos do carro <span className="font-normal text-muted-2">· arraste para reordenar (a 1ª é a capa)</span></label>
@@ -168,6 +273,35 @@ export default function AddVeiculoModal({ open, ehDono = true, onClose, onSave }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path d="M12 5v14M5 12h14" /></svg>
             <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addFotos(e.target.files)} />
           </label>
+        </div>
+      </div>
+
+      {/* Publicar ao salvar — só canais conectados habilitam (regra: ligar canal a canal).
+          A publicação é assíncrona: o carro salva na hora e o status por canal fica no
+          modal Publicar/status. */}
+      <div className="mt-3.5">
+        <label className="text-[11.5px] font-semibold text-muted">Publicar anúncio em <span className="font-normal text-muted-2">· opcional, roda após salvar</span></label>
+        <div className="mt-1.5 grid grid-cols-2 gap-2">
+          {CANAIS_ANUNCIO.map((c) => {
+            const conectado = !!canaisConectados[c.chave];
+            const marcado = publicarEm.includes(c.chave);
+            return (
+              <label key={c.chave}
+                className={['flex items-center gap-2.5 border rounded-lg px-3 py-2.5',
+                  !conectado ? 'opacity-55 cursor-not-allowed bg-bg border-border'
+                    : marcado ? 'border-blue bg-blue-soft cursor-pointer'
+                    : 'border-border cursor-pointer hover:border-[#CBD5E1]'].join(' ')}>
+                <input type="checkbox" disabled={!conectado} checked={marcado}
+                  onChange={() => setPublicarEm((arr) => marcado ? arr.filter((k) => k !== c.chave) : [...arr, c.chave])}
+                  className="accent-[#185FA5] w-3.5 h-3.5" />
+                <span className="w-6 h-6 rounded-md grid place-items-center flex-shrink-0 font-bold text-[10px]" style={{ background: c.cor, color: c.corTexto }}>{c.nome[0]}</span>
+                <span className="min-w-0">
+                  <span className="block text-[12.5px] font-semibold truncate">{c.nome}</span>
+                  {!conectado && <span className="block text-[10px] text-muted-2">conecte em Configurações</span>}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 

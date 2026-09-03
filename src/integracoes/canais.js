@@ -7,7 +7,7 @@ export const CANAIS_ANUNCIO = [
   { chave: 'olx', nome: 'OLX', cor: '#6E0AD6', corTexto: '#fff',
     nota: 'Integração via API/feed, geralmente pelo mesmo ecossistema dos classificados.' },
   { chave: 'webmotors', nome: 'Webmotors', cor: '#E4002B', corTexto: '#fff',
-    nota: 'Exige homologação (Sensedia): OAuth, ambiente que expira ~90 dias. Pode atuar como hub para outros portais.' },
+    nota: 'Conector pronto — aguarda homologação do app (Sensedia). Conectar = usuário "Integrador de API" criado no Cockpit da loja.' },
   { chave: 'instagram', nome: 'Instagram', cor: '#E1306C', corTexto: '#fff',
     nota: 'Graph API (post/carrossel no feed). Precisa conta Business + app review (2–4 semanas). Marketplace orgânico NÃO tem API aberta.' },
   { chave: 'agregador', nome: 'Agregador (multi-portais)', cor: '#0F766E', corTexto: '#fff',
@@ -19,5 +19,10 @@ export const CANAIS_MENSAGERIA = [
     nota: 'Cloud API (Meta direto ou via BSP). Cada loja usa o próprio WABA e número.' },
 ];
 
-export const TODOS_CANAIS = [...CANAIS_ANUNCIO, ...CANAIS_MENSAGERIA];
+export const CANAIS_ESTOQUE_LEGAL = [
+  { chave: 'renave', nome: 'RENAVE (Renave Fácil)', cor: '#0B3D91', corTexto: '#fff',
+    nota: 'Alimenta cadastro (cliente/veículo) e a chave da NF-e na Renave Fácil; o processo legal (entrada/saída no RENAVE) é feito no painel dela, não aqui. Sem webhook — status é consultado sob demanda, nunca em lote (proibido pela doc da integradora). Sem consignação — a API não tem esse endpoint.' },
+];
+
+export const TODOS_CANAIS = [...CANAIS_ANUNCIO, ...CANAIS_MENSAGERIA, ...CANAIS_ESTOQUE_LEGAL];
 export const canalPorChave = (chave) => TODOS_CANAIS.find((c) => c.chave === chave);

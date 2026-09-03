@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { Topbar } from '../../components/Layout';
 import { useToast } from '../../components/Toast';
 import { brl, fmt } from '../../lib/format';
+import { useAuth } from '../../auth/AuthContext';
 import { usePreparacao } from './usePreparacao';
 import { FORMAS_PGTO } from './demoPrep';
 import GastoPreparacaoForm from './GastoPreparacaoForm';
+import NotaFiscalCell from '../../components/NotaFiscalCell';
+import { prepararNota } from '../../lib/notaFiscal';
 
 const ahVendaSit = ['estoque', 'reservado'];
 const vendidoSit = ['vendido', 'repasse'];
@@ -117,8 +120,17 @@ export default function PreparacaoPage() {
 }
 
 function DetalheCarro({ prep, veic, onVoltar, onAddGasto }) {
+  const toast = useToast();
+  const { usuario } = useAuth();
   const itens = prep.gastosDe(veic);
   const total = prep.totalDe(veic);
+
+  async function anexarNota(gasto, file) {
+    const r = await prepararNota({ file, demo: prep.demo, lojaId: usuario?.loja_id, ref: gasto.id });
+    if (r.error) { toast('Erro ao anexar nota: ' + r.error.message); return; }
+    await prep.updateGasto(veic, gasto, { nota_fiscal_url: r.url, nota_fiscal_tipo: r.tipo, nota_fiscal_path: r.path || null });
+    toast('Nota fiscal anexada');
+  }
 
   return (
     <>
@@ -141,12 +153,12 @@ function DetalheCarro({ prep, veic, onVoltar, onAddGasto }) {
               <thead>
                 <tr className="bg-[#F4F7FB]">
                   <Th>#</Th><Th>Descrição do gasto</Th><Th>Data</Th><Th>Forma de pgto</Th>
-                  <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Observações</Th><Th>{''}</Th>
+                  <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Observações</Th><Th center>Nota fiscal</Th><Th>{''}</Th>
                 </tr>
               </thead>
               <tbody>
                 {itens.length === 0 && (
-                  <tr><td colSpan={8} className="px-[14px] py-8 text-center text-muted">Sem gastos lançados. Use "Adicionar gasto".</td></tr>
+                  <tr><td colSpan={9} className="px-[14px] py-8 text-center text-muted">Sem gastos lançados. Use "Adicionar gasto".</td></tr>
                 )}
                 {itens.map((x, i) => (
                   <tr key={x.id} className="border-b border-border odd:bg-[#FAFBFD] hover:bg-blue-soft/50">
@@ -178,6 +190,9 @@ function DetalheCarro({ prep, veic, onVoltar, onAddGasto }) {
                     </SheetTd>
                     <SheetTd>
                       <CellInput value={x.observacoes} onChange={(v) => prep.updateGasto(veic, x, { observacoes: v })} placeholder="—" />
+                    </SheetTd>
+                    <SheetTd center>
+                      <NotaFiscalCell url={x.nota_fiscal_url} path={x.nota_fiscal_path} tipo={x.nota_fiscal_tipo} onAttach={(file) => anexarNota(x, file)} />
                     </SheetTd>
                     <SheetTd>
                       <button onClick={() => prep.delGasto(veic, x)} aria-label="remover"

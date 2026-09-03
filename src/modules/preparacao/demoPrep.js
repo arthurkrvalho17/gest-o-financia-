@@ -63,6 +63,13 @@ export function setStatusGastoDemo(codigo, id, status) {
   if (g) g.status = status;
 }
 
+// Atualiza campos de um gasto (ex.: nota fiscal) pela chave codigo + id. Mutável
+// no store (fonte única) — reflete na Preparação e no Financeiro.
+export function updateGastoDemo(codigo, id, patch) {
+  const g = gastosDemo(codigo).find((x) => x.id === id);
+  if (g) Object.assign(g, patch);
+}
+
 export function novoGastoDemo() {
   return g('', '', '', 0, 'pendente');
 }

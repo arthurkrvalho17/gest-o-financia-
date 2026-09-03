@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null); // linha em "usuarios"
   const [loja, setLoja] = useState(null); // linha em "lojas"
   const [carregando, setCarregando] = useState(true);
+  const [modoRecuperacao, setModoRecuperacao] = useState(false);
 
   // Busca o usuário (e a loja dele) a partir da sessão logada.
   async function carregarPerfil(sessaoAtual) {
@@ -54,7 +55,13 @@ export function AuthProvider({ children }) {
       setCarregando(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, novaSessao) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (evt, novaSessao) => {
+      if (evt === 'PASSWORD_RECOVERY') {
+        setModoRecuperacao(true);
+        setSession(novaSessao);
+        return;
+      }
+      setModoRecuperacao(false);
       setSession(novaSessao);
       await carregarPerfil(novaSessao);
     });
@@ -69,14 +76,24 @@ export function AuthProvider({ children }) {
     return supabase.auth.signInWithPassword({ email, password: senha });
   }
 
-  async function cadastrar({ email, senha, nome, nomeLoja, cnpj }) {
+  async function cadastrar({ email, senha, nome, nomeLoja, cnpj, celular, cep, logradouro, bairro, cidade, uf }) {
     // O trigger handle_new_user() lê este metadata para criar a loja
     // e vincular o usuário a ela automaticamente.
     return supabase.auth.signUp({
       email,
       password: senha,
       options: {
-        data: { nome, nome_loja: nomeLoja, cnpj: cnpj || '' },
+        data: {
+          nome,
+          nome_loja: nomeLoja,
+          cnpj: cnpj || '',
+          celular: celular || '',
+          cep: cep || '',
+          logradouro: logradouro || '',
+          bairro: bairro || '',
+          cidade: cidade || '',
+          uf: uf || '',
+        },
       },
     });
   }
@@ -85,16 +102,32 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }
 
+  async function recuperarSenha(email) {
+    return supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+  }
+
+  async function redefinirSenha(novaSenha) {
+    const resultado = await supabase.auth.updateUser({ password: novaSenha });
+    if (!resultado.error) setModoRecuperacao(false);
+    return resultado;
+  }
+
   // Troca o papel no modo demonstração, para visualizar as duas visões.
   function definirPapelDemo(papel) {
     setUsuario((u) => (u ? { ...u, papel } : u));
   }
 
-  const ehDono = (usuario?.papel || 'dono') !== 'funcionario';
+  // No modo real, exige papel === 'dono' explicitamente (papel null não concede acesso).
+  // No demo, mantém 'dono' como default para o seletor de papel funcionar.
+  const ehDono = supabaseConfigurado
+    ? usuario?.papel === 'dono'
+    : (usuario?.papel || 'dono') !== 'funcionario';
 
   const valor = {
-    session, usuario, loja, carregando, ehDono,
-    entrar, cadastrar, sair, definirPapelDemo,
+    session, usuario, loja, carregando, ehDono, modoRecuperacao,
+    entrar, cadastrar, sair, recuperarSenha, redefinirSenha, definirPapelDemo,
     demo: !supabaseConfigurado,
   };
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;

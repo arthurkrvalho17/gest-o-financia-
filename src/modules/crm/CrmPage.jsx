@@ -53,7 +53,11 @@ export default function CrmPage() {
         <div className="grid grid-cols-3 gap-3.5 mb-[18px] max-[1000px]:grid-cols-1">
           <Kpi label="Leads do mês" valor={crm.leadsMes} foot="entradas no funil" />
           <Kpi label="Taxa de conversão" valor={crm.conversao} foot="vendas ÷ leads no mês" />
-          <Kpi label="Negócios em aberto" valor={crm.negociosAbertos} foot="no funil agora" />
+          <Kpi
+            label="Canal que mais vendeu"
+            valor={crm.canalTopMes.canal ? (ORIGENS[crm.canalTopMes.canal]?.label || crm.canalTopMes.canal) : '—'}
+            foot={crm.canalTopMes.canal ? `${crm.canalTopMes.count} de ${crm.canalTopMes.total} vendas do mês` : 'sem vendas no mês'}
+          />
         </div>
 
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -149,7 +153,7 @@ function HistoricoView({ crm, onVoltar }) {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
               <thead>
-                <tr><Th>Mês</Th><Th r>Leads</Th><Th r>Vendas</Th><Th r>Conversão</Th><Th r>Ticket médio</Th></tr>
+                <tr><Th>Mês</Th><Th r>Leads</Th><Th r>Vendas</Th><Th r>Conversão</Th><Th r>Canal que mais vendeu</Th></tr>
               </thead>
               <tbody>
                 {crm.historico.length === 0 && <tr><td colSpan={5} className="px-[14px] py-8 text-center text-muted">Sem dados ainda.</td></tr>}
@@ -159,7 +163,7 @@ function HistoricoView({ crm, onVoltar }) {
                     <Td r className="num">{h.leads}</Td>
                     <Td r className="num">{h.vendas}</Td>
                     <Td r className="num">{h.conversao}</Td>
-                    <Td r className="num">{fmt(h.ticket)}</Td>
+                    <Td r>{h.canalTop ? (ORIGENS[h.canalTop]?.label || h.canalTop) : '—'}</Td>
                   </tr>
                 ))}
               </tbody>

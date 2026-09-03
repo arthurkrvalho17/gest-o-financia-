@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Modal from '../../components/Modal';
 import { brl, fmt, parseBR, ddmm, hojeISO } from '../../lib/format';
+import { buscarCep } from '../../lib/cep';
 
 const FORMAS = [
   { v: 'avista', label: 'À vista' },
@@ -24,22 +25,53 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
   const [valorStr, setValorStr] = useState('');
   const [data, setData] = useState(hojeISO());
   const [comprador, setComprador] = useState('');
+  const [compradorCpf, setCompradorCpf] = useState('');
   const [forma, setForma] = useState('avista');
   const [origemLead, setOrigemLead] = useState('');
   const [vendedor, setVendedor] = useState('');
   const [obs, setObs] = useState('');
+  // Endereço do comprador — exigido pela Spedy para emitir a NF-e
+  // (receiver.address). CEP busca o resto automaticamente (ViaCEP);
+  // número é sempre digitado à mão.
+  const [cep, setCep] = useState('');
+  const [logradouro, setLogradouro] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [uf, setUf] = useState('');
+  const [cidadeIbge, setCidadeIbge] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState('');
 
   useEffect(() => {
     if (open && veiculo) {
       setValorStr((veiculo.pedido || 0).toLocaleString('pt-BR'));
       setData(hojeISO());
       setComprador('');
+      setCompradorCpf('');
       setForma('avista');
       setOrigemLead('');
       setVendedor('');
       setObs('');
+      setCep(''); setLogradouro(''); setNumero(''); setBairro(''); setCidade(''); setUf(''); setCidadeIbge('');
+      setErroCep('');
     }
   }, [open, veiculo]);
+
+  async function handleCepBlur() {
+    const digitos = cep.replace(/\D/g, '');
+    if (digitos.length !== 8) return;
+    setBuscandoCep(true);
+    setErroCep('');
+    const r = await buscarCep(digitos);
+    setBuscandoCep(false);
+    if (r.erro) { setErroCep(r.erro); return; }
+    setLogradouro(r.logradouro);
+    setBairro(r.bairro);
+    setCidade(r.cidade);
+    setUf(r.uf);
+    setCidadeIbge(r.cidadeIbge);
+  }
 
   const valor = parseBR(valorStr);
   const lucro = useMemo(
@@ -68,10 +100,18 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
                 valor_venda: valor || veiculo.pedido,
                 data_venda: data,
                 comprador_nome: comprador,
+                comprador_cpf: compradorCpf || null,
                 forma_pagamento: forma,
                 origem_lead: origemLead || null,
                 vendedor_id: vendedor || null,
                 observacao: obs || null,
+                comprador_cep: cep.replace(/\D/g, '') || null,
+                comprador_logradouro: logradouro || null,
+                comprador_numero: numero || null,
+                comprador_bairro: bairro || null,
+                comprador_cidade: cidade || null,
+                comprador_cidade_ibge: cidadeIbge || null,
+                comprador_uf: uf || null,
               })
             }
           >
@@ -103,9 +143,35 @@ export default function RegistrarVendaModal({ open, veiculo, custos, equipe = []
             {equipe.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
         </Field>
-        <Field label="Comprador" full>
+        <Field label="Comprador">
           <input value={comprador} onChange={(e) => setComprador(e.target.value)} placeholder="Nome do cliente"
             className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </Field>
+        <Field label="CPF/CNPJ do comprador">
+          <input value={compradorCpf} onChange={(e) => setCompradorCpf(e.target.value)} placeholder="Necessário para emitir a NF-e"
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </Field>
+        <Field label="CEP do comprador">
+          <input value={cep} onChange={(e) => setCep(e.target.value)} onBlur={handleCepBlur} placeholder="Necessário para emitir a NF-e"
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+          {buscandoCep && <span className="text-[11px] text-muted-2">Buscando endereço…</span>}
+          {erroCep && <span className="text-[11px] text-red">{erroCep}</span>}
+        </Field>
+        <Field label="Número">
+          <input value={numero} onChange={(e) => setNumero(e.target.value)}
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </Field>
+        <Field label="Logradouro" full>
+          <input value={logradouro} onChange={(e) => setLogradouro(e.target.value)} placeholder="Preenchido automaticamente pelo CEP"
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </Field>
+        <Field label="Bairro">
+          <input value={bairro} onChange={(e) => setBairro(e.target.value)}
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none focus:border-blue w-full" />
+        </Field>
+        <Field label="Cidade/UF">
+          <input value={cidade && uf ? `${cidade}/${uf}` : ''} readOnly
+            className="text-[13.5px] px-[11px] py-2.5 border border-border rounded-lg outline-none bg-[#F7F9FC] w-full" />
         </Field>
         <Field label="Forma de pagamento">
           <select value={forma} onChange={(e) => setForma(e.target.value)}

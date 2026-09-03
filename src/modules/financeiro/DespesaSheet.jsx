@@ -3,6 +3,9 @@ import { Topbar } from '../../components/Layout';
 import { brl } from '../../lib/format';
 import LembreteModal from './LembreteModal';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../auth/AuthContext';
+import NotaFiscalCell from '../../components/NotaFiscalCell';
+import { prepararNota } from '../../lib/notaFiscal';
 
 const BellIcon = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
@@ -14,12 +17,20 @@ const BellIcon = ({ className }) => (
 // Planilha editável de uma categoria de despesa (fixa | outra) de um mês.
 export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar }) {
   const toast = useToast();
+  const { usuario } = useAuth();
   const [lembreteAlvo, setLembreteAlvo] = useState(null);
   const itens = fin.despesasDe(mes, categoria);
   const total = fin.totalDespesas(mes, categoria);
   const titulo = categoria === 'fixa' ? 'Despesas fixas' : 'Outras despesas';
 
   const up = (item, patch) => fin.updateDespesa(mes, categoria, item, patch);
+
+  async function anexarNota(item, file) {
+    const r = await prepararNota({ file, demo: fin.demo, lojaId: usuario?.loja_id, ref: item.id });
+    if (r.error) { toast('Erro ao anexar nota: ' + r.error.message); return; }
+    await up(item, { nota_fiscal_url: r.url, nota_fiscal_tipo: r.tipo, nota_fiscal_path: r.path || null });
+    toast('Nota fiscal anexada');
+  }
 
   function salvarLembrete(dia, hora) {
     up(lembreteAlvo, { lembrete_ativo: true, lembrete_dia: dia, lembrete_hora: hora });
@@ -53,12 +64,12 @@ export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar })
               <thead>
                 <tr className="bg-[#F4F7FB]">
                   <Th>#</Th><Th>Descrição</Th><Th>Vencimento</Th><Th center>Lembrete</Th>
-                  <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Data pgto.</Th><Th>Observações</Th><Th>{''}</Th>
+                  <Th r>Valor (R$)</Th><Th center>Status</Th><Th>Data pgto.</Th><Th>Observações</Th><Th center>Nota fiscal</Th><Th>{''}</Th>
                 </tr>
               </thead>
               <tbody>
                 {itens.length === 0 && (
-                  <tr><td colSpan={9} className="px-[14px] py-8 text-center text-muted">Sem lançamentos. Use "Adicionar despesa".</td></tr>
+                  <tr><td colSpan={10} className="px-[14px] py-8 text-center text-muted">Sem lançamentos. Use "Adicionar despesa".</td></tr>
                 )}
                 {itens.map((x, i) => (
                   <tr key={x.id} className="odd:bg-[#FAFBFD] hover:bg-blue-soft/50">
@@ -83,6 +94,9 @@ export default function DespesaSheet({ fin, mes, mesNome, categoria, onVoltar })
                     </SheetTd>
                     <SheetTd><Cell value={x.data_pgto} onChange={(v) => up(x, { data_pgto: v })} placeholder="—" w="80px" /></SheetTd>
                     <SheetTd><Cell value={x.observacoes} onChange={(v) => up(x, { observacoes: v })} placeholder="—" /></SheetTd>
+                    <SheetTd center>
+                      <NotaFiscalCell url={x.nota_fiscal_url} path={x.nota_fiscal_path} tipo={x.nota_fiscal_tipo} onAttach={(file) => anexarNota(x, file)} />
+                    </SheetTd>
                     <SheetTd>
                       <button onClick={() => fin.delDespesa(mes, categoria, x)} aria-label="remover"
                         className="text-muted-2 hover:text-red hover:bg-red-soft rounded-md px-[7px] text-[17px] leading-none">×</button>

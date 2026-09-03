@@ -4,6 +4,8 @@
 let identidade = {
   nome: 'Auto Mendes Veículos',
   cnpj: '00.000.000/0001-00',
+  endereco: 'Av. das Nações, 1500 — Centro',
+  cidade_uf: 'São Paulo/SP',
   logoDataUrl: null, // imagem da logo (dataURL) — quando enviada pela loja
 };
 

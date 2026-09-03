@@ -7,6 +7,9 @@ import { mesesPassados, NOMES_MES } from './demoFin';
 import DespesaSheet from './DespesaSheet';
 import GastoPreparacaoForm from '../preparacao/GastoPreparacaoForm';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../auth/AuthContext';
+import NotaFiscalCell from '../../components/NotaFiscalCell';
+import { prepararNota } from '../../lib/notaFiscal';
 
 const hoje = new Date();
 const MES_ATUAL = hoje.toISOString().slice(0, 7); // YYYY-MM
@@ -89,53 +92,13 @@ export default function FinanceiroPage() {
       isOverview
       onAbrirCategoria={(cat) => abrirCategoria(MES_ATUAL, NOME_MES_ATUAL, cat, 'overview')}
       historico={
-        <>
-          <ContasAPagar fin={fin} mes={MES_ATUAL} />
-          <div className="mt-[18px]">
-            <Historico
-              fin={fin}
-              dadosMesAtual={dadosMesAtual}
-              onAbrirMes={(mes, mesNome) => setView({ tipo: 'month', mes, mesNome })}
-            />
-          </div>
-        </>
+        <Historico
+          fin={fin}
+          dadosMesAtual={dadosMesAtual}
+          onAbrirMes={(mes, mesNome) => setView({ tipo: 'month', mes, mesNome })}
+        />
       }
     />
-  );
-}
-
-// Contas a pagar — pendentes do mês (fixas + preparação + outras). Visão filtrada.
-function ContasAPagar({ fin, mes }) {
-  const toast = useToast();
-  const itens = fin.contasAPagar(mes);
-  const total = itens.reduce((s, x) => s + (Number(x.valor) || 0), 0);
-  const corCat = { 'Despesas fixas': '#185FA5', 'Preparação dos carros': '#15803D', 'Outras despesas': '#B45309' };
-  return (
-    <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
-      <div className="flex items-center justify-between px-[18px] py-[15px] border-b border-border">
-        <h2 className="text-[14.5px] font-semibold">Contas a pagar</h2>
-        <span className="text-[12px] text-muted-2">pendentes do mês</span>
-      </div>
-      {itens.length === 0 && <div className="px-[18px] py-8 text-center text-muted text-[13px]">Tudo pago neste mês 🎉</div>}
-      {itens.map((x) => (
-        <div key={`${x.fonte}-${x.id}`} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-border last:border-b-0 odd:bg-[#FAFBFD]">
-          <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: corCat[x.categoria] || '#94A3B8' }} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-medium truncate">{x.descricao || '—'}</div>
-            <div className="text-[11px] text-muted-2">{x.categoria}</div>
-          </div>
-          <span className="num font-semibold text-[13px]">{brl(x.valor)}</span>
-          <button onClick={async () => { await fin.marcarPago(x, mes); toast('Marcado como pago'); }}
-            className="text-[12px] font-semibold text-green bg-green-soft hover:bg-[#d6efdf] rounded-md px-3 py-1.5 whitespace-nowrap">Marcar pago</button>
-        </div>
-      ))}
-      {itens.length > 0 && (
-        <div className="flex justify-between px-[18px] py-[15px] border-t border-border bg-[#F4F7FB]">
-          <span className="font-semibold">Total a pagar</span>
-          <span className="font-extrabold text-[17px] num text-amber">{brl(total)}</span>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -268,9 +231,17 @@ function Linha({ rotulo, valor }) {
 // MESMO formulário da aba Preparação. Fonte única: o registro aparece nos dois lugares.
 function PreparacaoMesView({ fin, mes, mesNome, onVoltar }) {
   const toast = useToast();
+  const { usuario } = useAuth();
   const [formOpen, setFormOpen] = useState(false);
   const itens = fin.gastosPrepDoMes(mes);
   const total = itens.reduce((s, g) => s + (Number(g.valor) || 0), 0);
+
+  async function anexarNota(gasto, file) {
+    const r = await prepararNota({ file, demo: fin.demo, lojaId: usuario?.loja_id, ref: gasto.id });
+    if (r.error) { toast('Erro ao anexar nota: ' + r.error.message); return; }
+    await fin.anexarNotaPrep(gasto, { nota_fiscal_url: r.url, nota_fiscal_tipo: r.tipo, nota_fiscal_path: r.path || null });
+    toast('Nota fiscal anexada');
+  }
 
   async function salvar(veic, lista) {
     const { error } = await fin.addGastoPrepForm(veic, lista);
@@ -297,9 +268,9 @@ function PreparacaoMesView({ fin, mes, mesNome, onVoltar }) {
         <div className="bg-white border border-border rounded-card shadow-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[13px]">
-              <thead><tr className="bg-[#F4F7FB]"><Th>Carro</Th><Th>Descrição</Th><Th r>Valor</Th><Th center>Status</Th></tr></thead>
+              <thead><tr className="bg-[#F4F7FB]"><Th>Carro</Th><Th>Descrição</Th><Th r>Valor</Th><Th center>Status</Th><Th center>Nota fiscal</Th></tr></thead>
               <tbody>
-                {itens.length === 0 && <tr><td colSpan={4} className="px-[14px] py-8 text-center text-muted">Nenhum gasto de preparação neste mês. Use "Adicionar despesa".</td></tr>}
+                {itens.length === 0 && <tr><td colSpan={5} className="px-[14px] py-8 text-center text-muted">Nenhum gasto de preparação neste mês. Use "Adicionar despesa".</td></tr>}
                 {itens.map((g) => (
                   <tr key={g.id} className="odd:bg-[#FAFBFD] border-b border-border last:border-b-0">
                     <Td><span className="font-semibold">{g.carro}</span>{g.placa && <span className="text-muted-2"> · {g.placa}</span>}</Td>
@@ -309,6 +280,9 @@ function PreparacaoMesView({ fin, mes, mesNome, onVoltar }) {
                       <span className={['text-[10.5px] font-bold px-2 py-1 rounded-md', g.status === 'pago' ? 'bg-green-soft text-green' : 'bg-amber-soft text-amber'].join(' ')}>
                         {g.status === 'pago' ? 'PAGO' : 'PENDENTE'}
                       </span>
+                    </Td>
+                    <Td center>
+                      <NotaFiscalCell url={g.nota_fiscal_url} path={g.nota_fiscal_path} tipo={g.nota_fiscal_tipo} onAttach={(file) => anexarNota(g, file)} />
                     </Td>
                   </tr>
                 ))}

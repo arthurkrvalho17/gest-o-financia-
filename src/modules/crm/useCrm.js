@@ -3,12 +3,12 @@ import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVendas, demoVeiculos } from '../estoque/demoData';
 import { leadsDemo, setLeadsDemo, novoLeadDemo, historicoCrm, conversasDemo, enviarMensagemDemo,
-  getRegras, setRegra, distribuir, nomeVendedor, novoLeadDistribuido } from './demoCrm';
+  getRegras, setRegra, nomeVendedor, novoLeadDistribuido } from './demoCrm';
 
 const mesDe = (iso) => (iso || '').slice(0, 7);
-const MES_ATUAL = new Date().toISOString().slice(0, 7);
 
 export function useCrm() {
+  const MES_ATUAL = new Date().toISOString().slice(0, 7);
   const { usuario } = useAuth();
   const lojaId = usuario?.loja_id;
   const demo = !supabaseConfigurado;
@@ -28,11 +28,13 @@ export function useCrm() {
       return;
     }
     setLoading(true);
-    const [{ data: ls }, { data: vs }, { data: vd }] = await Promise.all([
+    const [{ data: ls, error: e1 }, { data: vs, error: e2 }, { data: vd, error: e3 }] = await Promise.all([
       supabase.from('leads').select('*').order('criado_em', { ascending: false }),
       supabase.from('veiculos').select('id, modelo, pedido'),
       supabase.from('vendas').select('*'),
     ]);
+    const erroCarregar = e1 || e2 || e3;
+    if (erroCarregar) console.error('[Financia+] Erro ao carregar CRM:', erroCarregar.message);
     setLeadsRaw(ls || []);
     setVeiculos(vs || []);
     setVendas(vd || []);
@@ -60,6 +62,17 @@ export function useCrm() {
   const conversao = leadsMes > 0 ? Math.round((vendasMes / leadsMes) * 100) + '%' : '0%';
   const abertasEtapas = ['novo', 'conversa', 'negociacao', 'agendado', 'ficha'];
   const negociosAbertos = leads.filter((x) => abertasEtapas.includes(x.etapa)).length;
+
+  // Canal que mais vendeu — agrupa as vendas do mês por origem_lead.
+  function canalMaisVendeu(mes) {
+    const vs = vendas.filter((v) => mesDe(v.data_venda) === mes);
+    if (!vs.length) return { canal: null, count: 0, total: 0 };
+    const cont = {};
+    for (const v of vs) { const c = v.origem_lead || 'outro'; cont[c] = (cont[c] || 0) + 1; }
+    const [canal, count] = Object.entries(cont).sort((a, b) => b[1] - a[1])[0];
+    return { canal, count, total: vs.length };
+  }
+  const canalTopMes = canalMaisVendeu(MES_ATUAL);
 
   function leadsPorEtapa(etapa) {
     return leads.filter((x) => x.etapa === etapa);
@@ -111,13 +124,19 @@ export function useCrm() {
   }
 
   // Histórico: demo usa seed; real agrega leads x vendas por mês (últimos meses).
-  const historico = demo ? historicoCrm : historicoReal(leads, vendas);
+  const historico = useMemo(
+    () => (demo ? historicoCrm : historicoReal(leads, vendas)),
+    [demo, leads, vendas]
+  );
 
   // Conversas (inbox) — cada conversa resolve o lead pelo nome (demo).
-  void tick;
-  const conversas = demo
-    ? conversasDemo().map((c) => ({ ...c, lead: leads.find((l) => l.nome === c.leadNome) || null }))
-    : [];
+  const conversas = useMemo(
+    () =>
+      demo
+        ? conversasDemo().map((c) => ({ ...c, lead: leads.find((l) => l.nome === c.leadNome) || null }))
+        : [],
+    [demo, leads, tick] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   function enviarMensagem(conversa, texto, tipo = 'texto') {
     if (demo) {
@@ -130,7 +149,7 @@ export function useCrm() {
   function definirRegra(canal, regra) { setRegra(canal, regra); setTick((t) => t + 1); }
 
   return {
-    demo, loading, leads, leadsMes, conversao, negociosAbertos,
+    demo, loading, leads, leadsMes, conversao, negociosAbertos, canalTopMes,
     leadsPorEtapa, moverLead, addLead, veiculos, historico,
     conversas, enviarMensagem,
     // distribuição
@@ -143,22 +162,26 @@ function historicoReal(leads, vendas) {
   for (const l of leads) {
     const m = mesDe(l.criado_em);
     if (!m) continue;
-    (meses[m] ||= { leads: 0, vendas: 0, fat: 0 }).leads++;
+    (meses[m] ||= { leads: 0, vendas: 0, canais: {} }).leads++;
   }
   for (const v of vendas) {
     const m = mesDe(v.data_venda);
     if (!m) continue;
-    const b = (meses[m] ||= { leads: 0, vendas: 0, fat: 0 });
+    const b = (meses[m] ||= { leads: 0, vendas: 0, canais: {} });
     b.vendas++;
-    b.fat += Number(v.valor_venda) || 0;
+    const c = v.origem_lead || 'outro';
+    b.canais[c] = (b.canais[c] || 0) + 1;
   }
   return Object.entries(meses)
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([mes, b]) => ({
-      mes,
-      leads: b.leads,
-      vendas: b.vendas,
-      conversao: b.leads > 0 ? Math.round((b.vendas / b.leads) * 100) + '%' : '0%',
-      ticket: b.vendas > 0 ? Math.round(b.fat / b.vendas) : 0,
-    }));
+    .map(([mes, b]) => {
+      const top = Object.entries(b.canais).sort((x, y) => y[1] - x[1])[0];
+      return {
+        mes,
+        leads: b.leads,
+        vendas: b.vendas,
+        conversao: b.leads > 0 ? Math.round((b.vendas / b.leads) * 100) + '%' : '0%',
+        canalTop: top ? top[0] : null,
+      };
+    });
 }

@@ -1,0 +1,18 @@
+{
+  "_aviso": "VALORES DE HOMOLOGACAO — NAO CONFIRMADOS POR CONTADOR. NAO USAR EM PRODUCAO. Nenhum codigo aqui foi escolhido por criterio tributario: todos vieram do comentario da migration 0019_spedy_config_fiscal.sql, que e a spec do projeto, e nenhum foi validado. Servem para exercitar o encanamento da integracao em ambiente de Homologacao (environmentType=development, nota SEM validade fiscal). Ver docs/HANDOFF-SPEDY.md e o documento de 2026-08-27 em cerebro/Gestao.",
+  "_conflito_cfop": "O CFOP 5502 vem da spec (README ADR-17, INTEGRACOES.md e migration 0019), mas na tabela nacional 5.502 e 'Remessa de mercadoria adquirida ou recebida de terceiros, com fim especifico de exportacao' — operacao de exportacao, nao venda a consumidor. A familia esperada para revenda seria 5.102 (dentro do estado) / 6.102 (interestadual). NAO substitui por conta propria: e a pergunta 1 da lista para o contador.",
+  "_pendencias": "ncm e icms.origin variam POR VEICULO, nao por loja (ver documento). csosn 400 pressupoe Simples Nacional. pis/cofins cst 07 declara isencao. Nada disso esta confirmado.",
+
+  "ncm": "87032310",
+  "cfop": 5502,
+  "icms": {
+    "origin": 0,
+    "csosn": 400
+  },
+  "pis": {
+    "cst": 7
+  },
+  "cofins": {
+    "cst": 7
+  }
+}

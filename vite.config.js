@@ -13,6 +13,15 @@ const raiz = dirname(fileURLToPath(import.meta.url));
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // As Edge Functions (Deno) importam a lib por URL — o Deno resolve isso
+    // sozinho em produção. Este alias só existe para o Vite/Vitest conseguir
+    // importar esses arquivos nos testes (unit-test dos guards de emitir()/
+    // processar()), usando a MESMA lib já instalada como dependência normal.
+    alias: {
+      'https://esm.sh/@supabase/supabase-js@2': '@supabase/supabase-js',
+    },
+  },
   css: {
     postcss: {
       plugins: [

@@ -12,10 +12,12 @@ dist
 dist-ssr
 *.local
 
-# Variáveis de ambiente (NUNCA subir chaves do Supabase)
+# Variaveis de ambiente (NUNCA subir chaves do Supabase)
 .env
 .env.local
 .env.*.local
+.env*.bak*
+.env.*.local.example
 
 # Editor directories and files
 .vscode/*

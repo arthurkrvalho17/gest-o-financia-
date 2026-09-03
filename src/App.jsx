@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { supabaseConfigurado } from './lib/supabase';
 import Login from './auth/Login';
+import RedefinirSenha from './auth/RedefinirSenha';
 import Layout from './components/Layout';
 import EstoquePage from './modules/estoque/EstoquePage';
 import PreparacaoPage from './modules/preparacao/PreparacaoPage';
@@ -19,9 +20,17 @@ function Carregando() {
 }
 
 export default function App() {
-  const { session, carregando, ehDono } = useAuth();
+  const { session, carregando, ehDono, modoRecuperacao } = useAuth();
 
   if (carregando) return <Carregando />;
+
+  if (modoRecuperacao) {
+    return (
+      <Routes>
+        <Route path="*" element={<RedefinirSenha />} />
+      </Routes>
+    );
+  }
 
   // Sem sessão (e com Supabase configurado): só a tela de login.
   // Sem Supabase, o app entra em modo demonstração.

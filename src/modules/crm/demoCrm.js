@@ -149,12 +149,12 @@ export function enviarMensagemDemo(conversaId, txt, tipo = 'texto') {
   );
 }
 
-// Histórico mês a mês (seed do protótipo).
+// Histórico mês a mês (seed). canalTop = canal que mais vendeu no mês.
 export const historicoCrm = [
-  { mes: 'Junho (parcial)', leads: 47, vendas: 9, conversao: '19%', ticket: 62400 },
-  { mes: 'Maio', leads: 62, vendas: 14, conversao: '23%', ticket: 58900 },
-  { mes: 'Abril', leads: 55, vendas: 11, conversao: '20%', ticket: 61200 },
-  { mes: 'Março', leads: 48, vendas: 8, conversao: '17%', ticket: 55300 },
-  { mes: 'Fevereiro', leads: 41, vendas: 7, conversao: '17%', ticket: 57800 },
-  { mes: 'Janeiro', leads: 38, vendas: 6, conversao: '16%', ticket: 53100 },
+  { mes: 'Junho (parcial)', leads: 47, vendas: 9, conversao: '19%', canalTop: 'traf_pago' },
+  { mes: 'Maio', leads: 62, vendas: 14, conversao: '23%', canalTop: 'mercado_livre' },
+  { mes: 'Abril', leads: 55, vendas: 11, conversao: '20%', canalTop: 'olx' },
+  { mes: 'Março', leads: 48, vendas: 8, conversao: '17%', canalTop: 'webmotors' },
+  { mes: 'Fevereiro', leads: 41, vendas: 7, conversao: '17%', canalTop: 'instagram' },
+  { mes: 'Janeiro', leads: 38, vendas: 6, conversao: '16%', canalTop: 'traf_pago' },
 ];

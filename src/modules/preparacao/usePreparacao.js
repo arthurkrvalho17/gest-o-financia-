@@ -3,6 +3,7 @@ import { supabase, supabaseConfigurado } from '../../lib/supabase';
 import { useAuth } from '../../auth/AuthContext';
 import { demoVeiculos } from '../estoque/demoData';
 import { gastosDemo, setGastosDemo, novoGastoDemo, addGastoPreparacao } from './demoPrep';
+import { anexarCompra } from '../../lib/veiculoValores';
 
 // Camada de dados da Preparação.
 // Demo: usa o store compartilhado demoPrep (mesma fonte do custo no Estoque).
@@ -24,11 +25,13 @@ export function usePreparacao() {
       return;
     }
     setLoading(true);
-    const [{ data: vs }, { data: gs }] = await Promise.all([
+    const [{ data: vs, error: e1 }, { data: gs, error: e2 }] = await Promise.all([
       supabase.from('veiculos').select('*').order('entrada', { ascending: false }),
       supabase.from('preparacao_gastos').select('*'),
     ]);
-    setVeiculos(vs || []);
+    const erroCarregar = e1 || e2;
+    if (erroCarregar) console.error('[Financia+] Erro ao carregar preparação:', erroCarregar.message);
+    setVeiculos(await anexarCompra(vs || []));
     setGastos(gs || []);
     setLoading(false);
   }, [demo]);
